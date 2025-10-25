@@ -1,0 +1,188 @@
+////
+StarForth Code Quality Baseline Report
+
+Document Metadata:
+- Document ID: starforth-governance/code-quality-baseline-report
+- Version: 1.0.0
+- Created: 2025-10-25
+- Purpose: Document code quality metrics and analysis results
+- Status: READY FOR ANALYSIS
+////
+
+= StarForth Code Quality Baseline Report
+
+**Document ID:** starforth-governance/code-quality-baseline-report
+**Version:** 1.0.0
+**Date:** 2025-10-25
+**Status:** Template - Awaiting Analysis
+
+---
+
+== Executive Summary
+
+This report documents StarForth's code quality baseline measured using SonarQube and Clang static analyzer.
+
+---
+
+== Analysis Metadata
+
+| Item | Value |
+|------|-------|
+| Analysis Date | YYYY-MM-DD |
+| Analyzer Tool | SonarQube / Clang |
+| Tool Version | (record version) |
+| Code Base | StarForth v1.0 |
+| Commit Hash | (git commit) |
+| Lines of Code | (LOC count) |
+| Language | ANSI C99 |
+
+---
+
+== Quality Metrics
+
+### Critical Issues
+
+| Count | Target | Status |
+|-------|--------|--------|
+| 0 | 0 | ✓ PASS / ✗ FAIL |
+
+**Critical Issues Resolved:**
+- (List any found and fixed)
+
+### High Severity Issues
+
+| Count | Target | Status |
+|-------|--------|--------|
+| N | < 5 | ✓ PASS / ✗ FAIL |
+
+**High Issues Summary:**
+| # | Issue | Location | Resolution |
+|---|-------|----------|-----------|
+| 1 | (description) | (file:line) | (fixed/waived/documented) |
+
+### Code Duplication
+
+| Metric | Measurement | Target | Status |
+|--------|-------------|--------|--------|
+| Duplication | X% | < 5% | ✓ PASS / ✗ FAIL |
+
+**Duplicate Code Blocks:**
+- (List any found)
+
+### Cyclomatic Complexity
+
+| Metric | Measurement | Target | Status |
+|--------|-------------|--------|--------|
+| Avg Complexity | X | < 10 | ✓ PASS / ✗ FAIL |
+| Max Complexity | X | (acceptable) | ✓ PASS / ✗ FAIL |
+
+**High Complexity Functions:**
+| Function | Complexity | Location |
+|----------|------------|----------|
+| (name) | N | src/file.c:line |
+
+### Test Coverage
+
+| Metric | Measurement | Target | Status |
+|--------|-------------|--------|--------|
+| Line Coverage | X% | ≥ 90% | ✓ PASS (from Tier I) |
+| Branch Coverage | X% | ≥ 80% | ✓ PASS (from Tier I) |
+| Function Coverage | X% | ≥ 95% | ✓ PASS (from Tier I) |
+
+### Maintainability Index
+
+| Metric | Measurement | Target | Status |
+|--------|-------------|--------|--------|
+| Maintainability Index | X | ≥ 85 | ✓ PASS / ✗ FAIL |
+
+---
+
+== Clang Static Analyzer Results
+
+### Null Pointer Dereferences
+
+| Count | Finding | Location |
+|-------|---------|----------|
+| 0 | (or list found) | |
+
+### Use-After-Free
+
+| Count | Finding | Location |
+|-------|---------|----------|
+| 0 | (or list found) | |
+
+### Buffer Overflows
+
+| Count | Finding | Location |
+|-------|---------|----------|
+| 0 | (or list found) | |
+
+### Resource Leaks
+
+| Count | Finding | Location |
+|-------|---------|----------|
+| 0 | (or list found) | |
+
+---
+
+== cppcheck Results
+
+**Total Warnings:** N
+**Errors:** N
+**Warnings:** N
+**Information:** N
+
+---
+
+== Trending Analysis
+
+### From Previous Baseline
+
+| Metric | Previous | Current | Trend |
+|--------|----------|---------|-------|
+| Critical Issues | - | 0 | ✓ (new baseline) |
+| High Issues | - | N | ✓ (acceptable) |
+| Duplication | - | X% | ✓ (acceptable) |
+| Complexity | - | X | ✓ (acceptable) |
+
+---
+
+== Recommendations for Improvement
+
+(List any recommendations for future iterations)
+
+- Reduce cyclomatic complexity in: (functions)
+- Refactor duplicate code blocks in: (locations)
+- Add null checks in: (functions)
+
+---
+
+== Approval
+
+All critical issues resolved or documented: ✓ YES / ✗ NO
+
+Code quality baseline acceptable: ✓ YES / ✗ NO
+
+---
+
+== Document Approval & Signature
+
+[cols="2,2,1"]
+|===
+| Role | Name/Title | Signature
+
+| **Author/Maintainer**
+| Robert A. James
+|
+
+| **Date Approved**
+|
+| _______________
+
+| **PGP Fingerprint**
+| [Your GPG key fingerprint]
+|
+
+|===
+
+**Archive Location:** ~/StarForth-Governance/Validation/TIER_II_QUALITY/
