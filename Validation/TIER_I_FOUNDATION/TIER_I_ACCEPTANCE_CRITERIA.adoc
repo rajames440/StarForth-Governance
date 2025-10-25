@@ -446,7 +446,7 @@ Tier I is certified complete only when all three sign:
 | _______________
 
 | **PGP Fingerprint**
-| [Your GPG key fingerprint]
+| 497CF5C0D295A7E8065C5D9A9CD3FBE66B5E2AE4
 |
 
 |===
