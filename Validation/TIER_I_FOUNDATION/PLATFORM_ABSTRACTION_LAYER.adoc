@@ -348,7 +348,7 @@ gcc -std=c99 -Wall -Werror     # ANSI C99 enforced
 |
 
 | **Date Approved**
-|
+| 25 October, 2025
 | _______________
 
 | **PGP Fingerprint**

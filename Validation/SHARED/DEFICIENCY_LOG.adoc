@@ -20,11 +20,11 @@ Each deficiency is logged with:
 |===
 | DEF-ID | Severity | Description | Status | Owner
 
-| DEF-[YYYY-001]
+| DEF-2025-001
 | [CRITICAL/HIGH/MEDIUM/LOW]
 | [What is the deficiency?]
 | [OPEN/CLOSED/DEFERRED]
-| [Name]
+| Robert A. James
 
 |===
 
@@ -32,13 +32,13 @@ Each deficiency is logged with:
 
 ```
 ID: DEF-2025-001
-Date Logged: [YYYY-MM-DD]
+Date Logged: 2025-10-25
 Severity: [CRITICAL/HIGH/MEDIUM/LOW]
 Description: [What is the issue?]
 Root Cause: [Why did it happen?]
 Corrective Action: [How will we fix it?]
 Test Plan: [How will we prove it's fixed?]
-Owner: [Who is responsible?]
+Owner: Robert A. James
 Deadline: [When must it be closed?]
 Status: OPEN / CLOSED / DEFERRED
 Evidence of Resolution: [What proves it's fixed?]
@@ -64,7 +64,7 @@ Evidence of Resolution: [What proves it's fixed?]
 |
 
 | **Date Approved**
-|
+| 25 October, 2025
 | _______________
 
 | **PGP Fingerprint**

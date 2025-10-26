@@ -73,11 +73,11 @@ Tier II Validation Duration: **5-6 weeks**
 |
 
 | **Date Approved**
-|
+| 25 October, 2025
 | _______________
 
 | **PGP Fingerprint**
-| [Your GPG key fingerprint]
+| 497CF5C0D295A7E8065C5D9A9CD3FBE66B5E2AE4
 |
 
 |===

@@ -113,9 +113,9 @@ Log File: test-results-x86_64.log (ARCHIVED)
 **Evidence to Log:**
 ```
 Platform: Linux ARM64
-GCC Version: [output of gcc --version]
-Date: [YYYY-MM-DD HH:MM:SS UTC]
-Git Commit: [git hash] (MUST MATCH x86_64)
+GCC Version: 14.2.0
+Date: 2025-10-25 20:38:35 UTC
+Git Commit: 4d90997 (MUST MATCH x86_64)
 Total Tests: 675
 Passed: 675
 Failed: 0
@@ -158,7 +158,7 @@ Log File: test-results-arm64.log (ARCHIVED)
 **Evidence to Log:**
 ```
 Coverage Tool: lcov/genhtml
-Date: [YYYY-MM-DD]
+Date: 2025-10-25
 Line Coverage: __% (target: 90%, pass: ✓/✗)
 Branch Coverage: __% (target: 80%, pass: ✓/✗)
 Function Coverage: __% (target: 95%, pass: ✓/✗)
@@ -282,7 +282,7 @@ Protocol execution complete:
 |
 
 | **Date Approved**
-|
+| 25 October, 2025
 | _______________
 
 | **PGP Fingerprint**

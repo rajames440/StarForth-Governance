@@ -502,8 +502,7 @@ StarForth's FORTH-79 core word implementations are organized into 19 specialized
 |
 
 | **Date Approved**
-|
-| _______________
+| 25 oCTOBER, 2025| _______________
 
 | **PGP Fingerprint**
 | 497CF5C0D295A7E8065C5D9A9CD3FBE66B5E2AE4

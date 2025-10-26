@@ -2192,7 +2192,7 @@ StarForth's architectural choices (C99 strict, zero dependencies, no malloc, det
 |
 
 | **Date Approved**
-|
+| 25 October, 2025
 | _______________
 
 | **PGP Fingerprint**

@@ -263,8 +263,7 @@ Each requirement is ACCEPTED when:
 |
 
 | **Date Approved**
-|
-| _______________
+| 25 oCTOBER, 2025| _______________
 
 | **PGP Fingerprint**
 | 497CF5C0D295A7E8065C5D9A9CD3FBE66B5E2AE4

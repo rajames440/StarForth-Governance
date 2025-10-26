@@ -83,7 +83,7 @@ Create `PLATFORM_ABSTRACTION_LAYER.adoc`:
 |
 
 | **Date Approved**
-|
+| 25 October, 2025
 | _______________
 
 | **PGP Fingerprint**

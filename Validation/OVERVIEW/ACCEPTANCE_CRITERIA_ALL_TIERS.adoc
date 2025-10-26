@@ -455,7 +455,7 @@ Every tier must be validated on **minimum 2 platforms:**
 |
 
 | **Date Approved**
-|
+| 25 October, 2025
 | _______________
 
 | **PGP Fingerprint**

@@ -218,8 +218,7 @@ No architectural barriers to ACL integration: ✓ YES / ✗ NO
 |
 
 | **Date Approved**
-|
-| _______________
+| 25 oCTOBER, 2025| _______________
 
 |===
 
