@@ -18,30 +18,33 @@ Document Metadata:
 
 == Execution Flow
 
+All words follow identical pattern through the interpreter:
+
 ```
-1. Parser reads next word from input
-   |
-   ↓
-2. Dictionary lookup (find_word)
-   - Search linked list from most recent to oldest
-   - O(n) search time
-   |
-   ↓
-3. Return DictEntry if found
-   - Contains: name, flags, func pointer, body, ACL cache
-   |
-   ↓
-4. Check execution context
-   - IMMEDIATE flag? Execute now
-   - In COMPILE mode? Compile reference
-   - In INTERPRET mode? Execute
-   |
-   ↓
-5. Execute word function
-   void word_func(struct VM *vm)
-   - Pops arguments from data stack
-   - Performs operation
-   - Pushes results back
+1. Input Parsing
+   └─> Fetch word name from input stream
+
+2. Dictionary Lookup
+   └─> vm_find(word_name)
+       ├─> Search linked-list dictionary
+       ├─> Return DictEntry* or NULL
+       └─> O(N) search time (N = number of words)
+
+3. Word Location Validation
+   └─> Check if DictEntry found
+       ├─> If not found: UNKNOWN_WORD error
+       └─> If found: proceed to execution
+
+4. Execution (PRIMARY ACL INTEGRATION POINT)
+   └─> vm_execute(dict_entry)
+       ├─> Invoke dict_entry->func(vm)
+       ├─> Word manipulates vm->data_stack
+       ├─> Word modifies vm->memory (optional)
+       └─> Return to interpreter
+
+5. Result Processing
+   └─> Stack updated, memory modified
+       └─> Next word parsed
 ```
 
 ---
@@ -229,7 +232,12 @@ Examples: QUIT, ABORT, COLD, WARM
 |
 
 | **Date Approved**
-| 25 oCTOBER, 2025| _______________
+| 25 October, 2025
+| _______________
+
+| **PGP Fingerprint**
+| 497CF5C0D295A7E8065C5D9A9CD3FBE66B5E2AE4
+|
 
 |===
 
