@@ -1,3 +1,85 @@
+# StarForth: The `--break-me` Flag — Code Challenge
+
+**Author:** Captain Bob (challenge)  
+**Date:** October 25, 2025
+
+---
+
+## ⚔️ Code Challenge — Optimization vs. Safety
+
+You’re being handed a deliberately sharp tool. The `--break-me` flag is a controlled explosion: a reproducible undefined-behavior event that appears only under aggressive optimization (`make fastest`) and *not* under the normal build (`make`).
+
+Your mission: understand it, reproduce it, explain it, and fix it — **without dulling the edge.**
+
+---
+
+## 🎯 Challenge Objective
+
+Reproduce the observed behavior, identify the exact UB site, and create a fix or mitigation that preserves both performance and safety.  
+Submit your findings and a patch or policy recommendation.
+
+### Deliverables
+
+1. Minimal reproducible example or confirmed repro using `starforth`.
+2. Root cause analysis (UB source and optimization interaction).
+3. Either:
+    - A minimal **safe patch** (preferred), or
+    - A documented **mitigation** with CI tests showing divergence detection.
+4. **1-page auditor summary** explaining risk, trade-offs, and fix rationale.
+
+---
+
+## ⚙️ Build Context
+
+| Build Type | Flags | Behavior |
+|-------------|--------|-----------|
+| `make` | `-O2` (safe, checks intact) | `--break-me` runs clean |
+| `make fastest` | `-O3 -flto -march=native` (aggressive) | `--break-me` crashes |
+
+Expect UB patterns like:
+- Out-of-bounds memory access
+- Use-after-free
+- Signed overflow
+- Uninitialized variable reads
+
+The crash isn’t random — it’s an **optimization side effect**.  
+The compiler assumes UB never happens and removes checks accordingly.
+
+---
+
+## 🧩 Suggested Process
+
+1. Run `make` and `make fastest` builds.
+2. Run `./starforth --break-me` on both.
+3. Identify divergence and locate the cause.
+4. Patch or document mitigation strategy.
+5. Produce short report + test verification.
+
+---
+
+## 🧮 Evaluation Criteria
+
+| Area | Weight |
+|-------|---------|
+| Reproduction & Diagnosis | 40% |
+| Fix or Mitigation Quality | 30% |
+| Test Coverage (CI on both builds) | 20% |
+| Report Clarity (Auditor-ready) | 10% |
+
+---
+
+## 💣 Minimal Repro Template
+
+```c
+#include <stdio.h>
+int main(void) {
+  int a[10];
+  int i = 15;  // UB under -O3
+  return a[i];
+}
+
+---
+
 # ADDENDUM: The --break-me Flag Discovery
 ## A Fascinating Case Study in Optimization vs. Safety Trade-offs
 
