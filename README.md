@@ -26,19 +26,39 @@ This governance repository establishes:
 
 ## What This Repo Contains
 
+### Quick Navigation
+- **[`VALIDATION_BOOK.adoc`](VALIDATION_BOOK.adoc)** - ⭐ Complete validation reference (START HERE)
+- **[`Validation/TIER_II_QUALITY/FINAL_REPORT_TIER_II.adoc`](Validation/TIER_II_QUALITY/FINAL_REPORT_TIER_II.adoc)** - Tier II executive summary
+- **[`Validation/TIER_I_FOUNDATION/FINAL_REPORT_TIER_I.adoc`](Validation/TIER_I_FOUNDATION/FINAL_REPORT_TIER_I.adoc)** - Tier I executive summary
+
 ### Core Compliance Documents
 - `FORTH-79_COMPLIANCE_MATRIX.adoc` - Standards compliance documentation
-- `STANDARDS_APPLICABILITY_ANALYSIS.adoc` - **NEW** Comprehensive analysis of ALL applicable ISO, IEC, IEEE, NIST standards organized by stringency (5 layers)
-- `STANDARDS_SUMMARY.md` - **NEW** Executive summary and quick reference for standards validation roadmap
+- `STANDARDS_APPLICABILITY_ANALYSIS.adoc` - Comprehensive analysis of ALL applicable ISO, IEC, IEEE, NIST standards organized by stringency (5 layers)
+- `STANDARDS_SUMMARY.md` - Executive summary and quick reference for standards validation roadmap
 - `GOVERNANCE.md` - Repository governance and maintenance
 
-### Planned Documents (To Be Created)
-- `ANSI_C99_COMPLIANCE_MATRIX.adoc` - Language compliance proof
-- `BUILD_AND_PORTABILITY_STANDARDS.adoc` - Build and portability validation
-- `TEST_FRAMEWORK_AND_RESULTS.adoc` - Test harness documentation
-- `ARCHITECTURE_DECISIONS.adoc` - Design decisions and rationale
-- `PLATFORM_ABSTRACTION_LAYER.adoc` - Hypervisor independence layer
-- `WORD_MODULE_INVENTORY.adoc` - All 19 modules documented
+### Tier I & II Validation Documents (Complete)
+
+**Code Quality & Compliance:**
+- `Validation/TIER_II_QUALITY/CODE_QUALITY_BASELINE_REPORT.adoc` - ANSI C99 strict compilation proof (GCC 14.2.0, -Wall -Werror)
+- `Validation/TIER_II_QUALITY/MISRA_C_COMPLIANCE_CHECKLIST.adoc` - MISRA C:2023 compliance (100% mandatory, 92% advisory)
+- `Validation/TIER_II_QUALITY/CERT_C_COMPLIANCE_CHECKLIST.adoc` - CERT C secure coding (100% critical rules, 0 unmitigated CWE)
+
+**Testing & Validation:**
+- `Validation/TIER_II_QUALITY/DETERMINISM_SPECIFICATION.adoc` - Test framework reproducibility (5+ identical runs)
+- `Validation/TIER_II_QUALITY/MEMORY_SAFETY_SPECIFICATION.adoc` - AddressSanitizer results (0 leaks, 0 overflows, LSAN clean)
+- `Validation/TIER_I_FOUNDATION/FINAL_REPORT_TIER_I.adoc` - Test methodology & results (675+ test suite)
+
+**Architecture & Design:**
+- `Validation/TIER_II_QUALITY/WORD_CALL_PATTERN_SPECIFICATION.adoc` - All 70 FORTH-79 core words documented by category
+- `Validation/TIER_II_QUALITY/DICTIONARY_SECURITY_ANALYSIS.adoc` - Dictionary structure, security properties, word immutability
+- `Validation/TIER_II_QUALITY/ACL_INTEGRATION_POINTS.adoc` - Architecture integration points for Phase III
+- `Validation/TIER_II_QUALITY/CAPABILITY_READINESS_COMPLETION_REPORT.adoc` - Complete architecture readiness assessment
+- `Validation/TIER_II_QUALITY/ACL_CACHING_STRATEGY.adoc` - Performance caching design & validation
+
+**Platforms & Portability:**
+- `Validation/TIER_I_FOUNDATION/PROTOCOLS/PROTOCOL_ARCHITECTURE_DOCUMENTATION.adoc` - Platform abstraction layer, hypervisor independence
+- Documented in Tier I: Runs on Linux, L4Re/Fiasco.OC, seL4, embedded systems unchanged
 
 ## How StarForth Fits StarshipOS
 
