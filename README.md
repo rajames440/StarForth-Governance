@@ -32,10 +32,10 @@ This governance repository establishes:
 - **[`Validation/TIER_I_FOUNDATION/FINAL_REPORT_TIER_I.adoc`](Validation/TIER_I_FOUNDATION/FINAL_REPORT_TIER_I.adoc)** - Tier I executive summary  
 
 ### Core Compliance Documents
-- `FORTH-79_COMPLIANCE_MATRIX.adoc` - Standards compliance documentation  
-- `STANDARDS_APPLICABILITY_ANALYSIS.adoc` - Comprehensive analysis of all applicable ISO, IEC, IEEE, NIST standards organized by stringency (5 layers)  
-- `STANDARDS_SUMMARY.md` - Executive summary and quick reference for standards validation roadmap  
-- `GOVERNANCE.md` - Repository governance and maintenance  
+- `FORTH-79_COMPLIANCE_MATRIX.adoc`  
+- `STANDARDS_APPLICABILITY_ANALYSIS.adoc`  
+- `STANDARDS_SUMMARY.md`  
+- `GOVERNANCE.md`  
 
 ### Tier I & II Validation Documents (Complete)
 
@@ -73,20 +73,9 @@ The StarshipOS governance repo handles **architecture and hypervisor integration
 ## Key Defensibility Claims
 
 ✅ **StarForth is FORTH-79 standard compliant**  
-- Evidence: 675+ test suite with standard mapping  
-- Audit trail: Git history and test coverage  
-
 ✅ **StarForth is strict ANSI C99**  
-- Evidence: Builds with `-std=c99 -Wall -Wextra -Werror`  
-- Validation: All platforms, all compilers  
-
 ✅ **StarForth is portable across hypervisors**  
-- Evidence: Runs on Linux, L4Re, seL4, embedded  
-- Architecture: Platform abstraction layer  
-
 ✅ **StarForth has zero external dependencies**  
-- Evidence: Standalone static binary  
-- Proof: No malloc, printf, or libc required  
 
 🧩 **Formal Verification in Progress – Isabelle/HOL Integration**  
 - The **StarForth VM semantics and dictionary model** are currently being encoded in **Isabelle/HOL**, targeting formal proof of core execution correctness.  
@@ -106,15 +95,61 @@ StarForth can be validated across **5 stringency layers** from basic software en
 > ✳️ **Isabelle/HOL proofs are currently being developed** for the StarForth VM core, focusing on stack discipline, return handling, and word immutability.  
 > This will enable **Layer 5** compliance (formal assurance) under ISO/IEC 15408 and IEC 61508 frameworks.
 
-## Formal Verification Roadmap (In Progress)
+---
 
-| Phase | Scope | Description | Deliverables | Status |
-|-------|--------|--------------|---------------|---------|
-| **1. Semantic Model Encoding** | VM Core | Encode StarForth stack & word semantics in Isabelle/HOL | `StarForth_Semantics.thy` | 🟢 In Progress |
-| **2. Invariant Proofs** | Control & Stack Safety | Prove stack consistency, return integrity, and deterministic execution | Proof bundle & lemmas | 🟢 In Progress |
-| **3. Behavioral Equivalence** | VM vs Reference | Prove equivalence between StarForth implementation and formal model | Isabelle equivalence theorems | 🟡 Planned |
-| **4. Integration with seL4** | Phase 2 Validation | Extend proof framework to include seL4 runtime and process model | Combined proof stack | ⚪ Future |
-| **5. Publication & Certification** | Formal Validation | Publicly release proofs and integrate with ISO 15408 evaluation | Published HOL archive + audit doc | ⚪ Planned |
+### Verification Independence Statement
+
+A legitimate concern in any formal assurance effort is **avoiding self-verification** — ensuring we did not simply formalize StarForth's implementation so that proofs trivially hold.  
+StarForth’s Isabelle/HOL effort follows **independent model derivation** and **bidirectional validation** principles:
+
+1. **Specification First, Code Second**  
+   The Isabelle/HOL model (`StarForth_Semantics.thy`) is derived **solely from the FORTH-79 specification**, not from the StarForth source code.  
+   The model defines what *should* happen — the C99 implementation is later validated *against* it.
+
+2. **Bidirectional Validation**  
+   - From theory → code (ensuring C99 conforms to the formal model).  
+   - From code → theory (ensuring the model faithfully represents all valid behaviors).
+
+3. **Reviewer Independence**  
+   Formalization and proof review are intentionally separated.  
+   Third-party reviewers and academic collaborators will audit the proofs and methodology.
+
+4. **Model Transparency**  
+   All Isabelle/HOL sources, lemmas, and proofs are published openly, ensuring reproducibility and community validation.
+
+5. **Traceability to Specification**  
+   Each theorem links to a specific FORTH-79 clause, preserving end-to-end traceability from **spec → model → code → test**.
+
+> ⚖️ **StarForth’s proofs validate FORTH-79 semantics — not StarForth’s implementation choices.**  
+> The implementation earns its validity by conforming to an independently derived mathematical model.
+
+---
+
+### Openness to Scrutiny and Collaboration
+
+StarForth’s formal verification effort welcomes **open, thoughtful participation** from the wider research and formal methods community.  
+We recognize that true assurance requires **transparency, reproducibility, and peer engagement** — not isolation.
+
+- All Isabelle/HOL proofs and models will be **publicly accessible**.  
+- Constructive criticism, proof reviews, and academic replication efforts are **explicitly encouraged**.  
+- We invite **formal methods practitioners, language theorists, and systems engineers** to review, challenge, and refine our approach.  
+- Feedback loops are logged and attributed, ensuring that collaborative improvements are traceable within the governance record.  
+
+> 🧠 *We don’t hide from scrutiny — we design for it.*
+
+---
+
+## Formal Verification Roadmap
+
+| Phase | Scope | Description | Deliverables | Assurance Integrity | Status |
+|-------|--------|--------------|---------------|----------------------|---------|
+| **1. Semantic Model Encoding** | VM Core | Encode StarForth stack & word semantics in Isabelle/HOL | `StarForth_Semantics.thy` | ✅ Separation maintained | 🟢 In Progress |
+| **2. Invariant Proofs** | Control & Stack Safety | Prove stack consistency, return integrity, and deterministic execution | Proof bundle & lemmas | ✅ Proofs derived from FORTH-79 spec | 🟢 In Progress |
+| **3. Behavioral Equivalence** | VM vs Reference | Prove equivalence between StarForth implementation and formal model | Isabelle equivalence theorems | 🔄 Cross-validation stage | 🟡 Planned |
+| **4. Integration with seL4** | Phase 2 Validation | Extend proof framework to include seL4 runtime and process model | Combined proof stack | 🧩 Dual verification with existing seL4 proofs | ⚪ Future |
+| **5. Publication & Certification** | Formal Validation | Release proof artifacts for open peer review and ISO 15408 evaluation | HOL archive + audit documentation | 🌍 External audit ready | ⚪ Planned |
+
+---
 
 ## For Siemens/Polarion
 
@@ -126,13 +161,17 @@ When evaluating StarshipOS for ALM support, note:
 - **StarForth portability:** Platform-independent layer proven  
 - **StarshipOS Phase 1:** Valid today (proven component + proven hypervisor)  
 - **StarshipOS Phase 2:** Requires ALM (adds novel physics algorithms to proven stack)  
-- **StarForth formal verification:** Isabelle/HOL model in progress  
+- **StarForth formal verification:** Isabelle/HOL model in progress and open to audit  
+
+---
 
 ## Getting Started
 
 1. Review `PHASE_ROADMAP.adoc` in the StarshipOS governance repo for overall strategy  
 2. Review this repo’s documents for component-level validation  
 3. See StarForth repository for actual source code and tests  
+
+---
 
 ## License
 
@@ -141,4 +180,6 @@ StarForth source: CC0 v1.0 (public domain)
 
 ---
 
-**StarForth:** The beating heart of StarshipOS. Proven. Portable. Perfect precision. Now, mathematically provable.
+**StarForth:** The beating heart of StarshipOS.  
+Proven. Portable. Perfect precision.  
+Now — mathematically provable and open to the world.
