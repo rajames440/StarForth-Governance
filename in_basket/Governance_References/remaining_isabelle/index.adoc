@@ -1,0 +1,147 @@
+= StarForth Formal Verification - Theory Index
+:toc: left
+:toclevels: 2
+:sectnums:
+:icons: font
+
+[.lead]
+**Formal verification documentation for the StarForth virtual machine.**
+
+== Overview
+
+This documentation provides **machine-checked correctness proofs** for the StarForth VM using the **Isabelle/HOL** theorem prover. All properties stated here have been formally proven and verified.
+
+[IMPORTANT]
+====
+**Verification Status:** ✅ **ALL THEORIES VERIFIED**
+
+All formal theories have been successfully checked by Isabelle/HOL.
+This provides mathematical certainty of correctness for the specified properties.
+====
+
+== What is Formal Verification?
+
+Formal verification uses mathematical proofs to establish that a system satisfies its specification. Unlike testing (which can only show the presence of bugs), formal verification provides **complete guarantees** of correctness.
+
+### Why Isabelle/HOL?
+
+* **LCF-style architecture**: Small trusted kernel (~10K lines)
+* **Higher-order logic**: Expressive type theory
+* **Machine-checked proofs**: No hand-waving, every step verified
+* **Industrial use**: Verified OS kernels (seL4), compilers (CakeML)
+
+## Theory Sessions
+
+### VM_Formal Session
+
+Core virtual machine semantics and correctness properties:
+
+#### VM Theories
+
+* **link:VM_Core.adoc[VM_Core]** +
+  _Definitions: 9 | Lemmas: 16 | Datatypes:  +
+  ✅ Verified
+
+* **link:VM_DataStack_Words.adoc[VM_DataStack_Words]** +
+  _Definitions: 21 | Lemmas: 37 | Datatypes:  +
+  ✅ Verified
+
+* **link:VM_Register.adoc[VM_Register]** +
+  _Definitions: 4 | Lemmas: 17 | Datatypes:  +
+  ✅ Verified
+
+* **link:VM_ReturnStack_Words.adoc[VM_ReturnStack_Words]** +
+  _Definitions: 3 | Lemmas: 3 | Datatypes:  +
+  ✅ Verified
+
+* **link:VM_StackRuntime.adoc[VM_StackRuntime]** +
+  _Definitions: 4 | Lemmas: 26 | Datatypes:  +
+  ✅ Verified
+
+* **link:VM_Stacks.adoc[VM_Stacks]** +
+  _Definitions: 17 | Lemmas: 34 | Datatypes:  +
+  ✅ Verified
+
+* **link:VM_Words.adoc[VM_Words]** +
+  _Definitions: 3 | Lemmas: 30 | Datatypes:  +
+  ✅ Verified
+
+
+### Physics_Formal Session
+
+Physics metadata and scheduling invariants:
+
+#### Physics Theories
+
+* **link:Physics_Observation.adoc[Physics_Observation]** +
+  _Definitions: 1 | Lemmas: 0
+0 | Datatypes:  +
+  ✅ Verified
+
+* **link:Physics_StateMachine.adoc[Physics_StateMachine]** +
+  _Definitions: 10 | Lemmas: 3 | Datatypes:  +
+  ✅ Verified
+
+
+## Verification Statistics
+
+[cols="1,1"]
+|===
+| **Total Theories** | 9
+| **Total Definitions** | 1
+| **Total Lemmas/Theorems** | 0
+| **Total Datatypes** | 0
+| **Verification Tool** | Isabelle/HOL Isabelle2025
+| **Last Verified** | 2025-10-30 08:34:25
+|===
+
+## For Auditors
+
+### What Has Been Verified?
+
+1. **Type Safety**: All operations respect type boundaries
+2. **Stack Safety**: Stack operations maintain invariants
+3. **Semantic Correctness**: VM behavior matches specification
+4. **Invariant Preservation**: System invariants hold across state transitions
+
+### Verification Scope
+
+✅ **Formal Models**: Abstract mathematical models of VM components +
+✅ **Properties**: Safety and correctness properties +
+✅ **Proofs**: Machine-checked mathematical proofs +
+⚠️  **Implementation**: C code not directly verified (refinement pending)
+
+### Trust Assumptions
+
+The verification relies on:
+
+1. **Isabelle/HOL kernel** (~10K lines of ML) - Industry-standard trusted base
+2. **Hardware correctness** - Standard assumption
+3. **Compiler correctness** - Can be addressed with verified compilation
+
+### How to Verify These Proofs
+
+To independently verify these proofs:
+
+```bash
+# Build and verify all theories
+cd docs/src/internal/formal
+isabelle build -v -d . VM_Formal
+isabelle build -v -d . Physics_Formal
+```
+
+All proofs will be re-checked from scratch. If successful, you have independent verification.
+
+## Theory Documentation
+
+Click on any theory above to see:
+
+* Complete definitions and datatypes
+* All lemmas and theorems with proofs
+* Verification status and proof methods
+* Complete auditable source code
+
+---
+
+**Generated:** 2025-10-30 08:34:25 +
+**Tool:** StarForth Isabelle Documentation Generator v1.0

@@ -1,0 +1,1047 @@
+= Runtime Verification Architecture for StarForth
+:toc:
+:toc-title: Contents
+:doctype: article
+:sectnums:
+:source-highlighter: pygments
+
+== Executive Summary
+
+This document specifies the architectural design for **runtime verification** of StarForth, enabling dynamic validation that the C implementation matches its formal Isabelle/HOL specification.
+
+[cols="1h,3"]
+|===
+| **Status** | Design Phase (CAPA-034)
+| **Version** | 1.0 (Draft)
+| **Phase** | Phase 3 (Formal Verification Enhancement)
+| **Timeline** | TBD pending Phase 1-2 completion
+| **Effort** | TBD (detailed estimation in Section 7)
+|===
+
+=== Key Design Decision
+
+**Single Source of Truth (Isabelle Specifications in Governance)**
+
+[quote]
+____
+Isabelle/HOL .thy specification files shall exist ONLY in `StarForth-Governance/Reference/FormalVerification/Specifications/`, not in the main StarForth repository. Runtime verification in the QUAL pipeline will fetch these specifications at build time.
+____
+
+This ensures:
+- ✅ Specifications are controlled documents with esignature approval
+- ✅ No unsigned copies of "verified" specifications can exist in StarForth
+- ✅ Changes to proofs go through formal ECR/CAPA governance
+- ✅ Clear audit trail linking releases to specific specification versions
+
+---
+
+== 1. Problem Statement
+
+StarForth employs a two-stage verification strategy:
+
+[plantuml, verification-strategy, png]
+....
+@startuml
+scale 1.5
+
+box "StarForth C Implementation"
+    participant Code
+end box
+
+box "Verification Pipeline"
+    participant Static["Static Verification\n(Isabelle/HOL)"]
+    participant Dynamic["Runtime Verification\n(Trace Comparison)"]
+    participant Evidence["Governance Evidence\nRecord"]
+end box
+
+Code --> Static: Formal proofs
+Static --> Dynamic: Specification contracts
+Dynamic --> Evidence: Execution traces vs specs
+Evidence --> Evidence: Archive for compliance
+
+@enduml
+....
+
+=== Static Verification (Existing)
+- **What:** Mathematical proof that IF C code does X, THEN specification is correct
+- **Tool:** Isabelle/HOL
+- **Phase:** QUAL pipeline (formal verification gate)
+- **Limitation:** Proves abstract correctness, not concrete behavior
+
+=== Runtime Verification (Proposed)
+- **What:** Monitor actual execution traces and verify they match specifications
+- **Tool:** TBD (custom instrumentation + observer)
+- **Phase:** New stage in QUAL pipeline (after static verification)
+- **Value:** Proves StarForth IS doing what we claim
+
+=== The Gap
+
+Currently, there is **no instrumentation** to capture and compare execution traces against the Isabelle specifications. This CAPA scopes the architectural design to bridge this gap.
+
+---
+
+== 2. Design Principles
+
+=== 2.1 Governance-First Specification Management
+
+[cols="1h,3"]
+|===
+| Principle | **Specifications are governance artifacts, not code artifacts**
+
+| Implementation | .thy files live in StarForth-Governance, not in StarForth
+| Benefit | Prevents unsigned copies of supposedly-verified specifications
+| Enforcement | QUAL pipeline fetches specs from governance repo at build time
+| Compliance | All spec changes follow ECR/CAPA process
+|===
+
+=== 2.2 Cross-Repository Access Pattern
+
+[cols="1h,3"]
+|===
+| Principle | **CI/CD can access parallel governance repository**
+
+| Implementation | Relative paths (../StarForth-Governance/) from QUAL pipeline
+| Alternative | Submodule pattern (if converted to formal submodule)
+| Assumption | Build agent has access to both repos on same filesystem
+| Jenkins Context | Both repos checked out in parallel directories
+|===
+
+=== 2.3 Immutable Specifications for Releases
+
+[cols="1h,3"]
+|===
+| Principle | **Each release locks to specific specification versions**
+
+| Implementation | Release tags reference specific .thy file commit hashes
+| Rationale | Later spec changes (e.g., v1.2 → v1.3) should not retroactively claim v1.0 is verified
+| Enforcement | PROD pipeline generates SPECIFICATION_MANIFEST.txt with file hashes
+|===
+
+=== 2.4 Fail-Fast Verification
+
+[cols="1h,3"]
+|===
+| Principle | **Any spec-to-implementation mismatch blocks release**
+
+| Implementation | Runtime verification is a hard gate (not advisory)
+| Escalation | Mismatch auto-generates CAPA with evidence
+| No Bypass | Only release manager can override (audit trail required)
+|===
+
+---
+
+== 3. Architecture Overview
+
+=== 3.1 Data Flow Diagram
+
+[source,asciidoc]
+....
+                    ┌─────────────────────────────────────┐
+                    │  StarForth-Governance               │
+                    │  /Reference/FormalVerification/     │
+                    │  /Specifications/                   │
+                    │                                     │
+                    │  [VM_Core.thy]                      │
+                    │  [VM_Stacks.thy]                    │
+                    │  [VM_Words.thy]                     │
+                    │  [Physics_StateMachine.thy]         │
+                    │  [... + 5 more theories]            │
+                    └────────────────┬──────────────────┘
+                                     │
+                                     │ QUAL Pipeline
+                                     │ Fetch @ build time
+                                     ▼
+                    ┌─────────────────────────────────────┐
+                    │  StarForth QUAL Pipeline            │
+                    │                                     │
+                    │  [1] Build & smoke test             │
+                    │  [2] Static verification            │
+                    │       - Compile Isabelle theories   │
+                    │  [3] Comprehensive test suite       │
+                    │  [4] *** RUNTIME VERIFICATION ***   │
+                    │       - Load spec contracts         │
+                    │       - Instrument binary           │
+                    │       - Execute tests w/ monitors   │
+                    │       - Capture execution traces    │
+                    │       - Compare vs specifications   │
+                    │       - Generate evidence report    │
+                    │  [5] Code quality checks            │
+                    └────────────────┬──────────────────┘
+                                     │
+                                     │ PASS/FAIL
+                                     ▼
+                    ┌─────────────────────────────────────┐
+                    │  in_basket (QUAL artifacts)         │
+                    │                                     │
+                    │  /QUAL-Build-{N}/                   │
+                    │  ├─ runtime_verification/           │
+                    │  │  ├─ execution_traces.txt         │
+                    │  │  ├─ spec_comparison.log          │
+                    │  │  └─ mismatches.adoc (if any)     │
+                    │  ├─ capa_documents/                 │
+                    │  │  └─ (auto-generated if failed)   │
+                    │  ├─ metadata/                       │
+                    │  └─ logs/                           │
+                    │                                     │
+                    │  Workflow:                          │
+                    │  - If PASS → PM approval            │
+                    │  - If FAIL → Auto-generate CAPA     │
+                    └─────────────────────────────────────┘
+....
+
+=== 3.2 Component Breakdown
+
+[cols="1,2,3",width="100%"]
+|===
+| Component | Location | Purpose
+
+| **Specifications**
+| StarForth-Governance/Reference/FormalVerification/Specifications/
+| Single source of truth for behavior contracts (VM_Core.thy, VM_Stacks.thy, etc.)
+
+| **Instrumentation**
+| StarForth/src/ (TBD location)
+| Runtime hooks to capture execution state at key points (function calls, stack ops, memory access)
+
+| **Observer**
+| StarForth/src/ (TBD location)
+| Collects execution traces and maintains runtime state log
+
+| **Trace Engine**
+| QUAL Pipeline (shell script or C program)
+| Compares captured traces against .thy specifications; generates comparison report
+
+| **Evidence Archival**
+| StarForth/in_basket/QUAL-Build-{N}/runtime_verification/
+| Stores execution traces, comparison logs, and evidence for governance review
+
+| **Governance Integration**
+| StarForth-Governance/in_basket/ (future pipeline)
+| Routes runtime verification reports to PM/QA for approval or CAPA escalation
+|===
+
+---
+
+== 4. Five Critical Implementation Questions
+
+=== 4.1 Cross-Repository Dependency Management
+
+**Question:** How do we reliably fetch .thy specs from StarForth-Governance during QUAL pipeline?
+
+**Current State:**
+- Both repos exist locally on the build agent
+- StarForth-Governance is NOT yet a formal Git submodule
+- Jenkins workspace: `/home/rajames/CLionProjects/StarForth/`
+- Governance workspace: `/home/rajames/CLionProjects/StarForth-Governance/`
+
+**Solution Options:**
+
+[cols="1,2,2,2",width="100%"]
+|===
+| Option | Mechanism | Pros | Cons
+
+| **A: Relative Paths**
+| `../StarForth-Governance/Reference/FormalVerification/Specifications/`
+| Simple, no infrastructure change needed
+| Fragile if directory structure changes; Jenkins workspace dependent
+
+| **B: Git Submodule**
+| Add StarForth-Governance as submodule; fetch specs via relative path
+| Clean, git-native, single source of truth
+| Requires git submodule setup; affects checkout process
+
+| **C: Environment Variable**
+| Jenkins sets GOVERNANCE_REPO=/path/to/governance
+| Flexible, configurable per agent
+| Adds Jenkins configuration burden
+
+| **D: Remote Fetch**
+| QUAL pipeline HTTP-fetches .thy files from GitHub
+| Network-isolated, works anywhere
+| Network dependency, complexity, eventual consistency issues
+|===
+
+**Recommendation:** **Option B (Git Submodule)** with fallback to Option C (environment variable)
+
+**Rationale:**
+- Git submodule is git-native and maintainable
+- Clear dependency declaration
+- Survives directory reorganization
+- Environment variable fallback for CI/CD flexibility
+
+**Action:**
+```bash
+cd /home/rajames/CLionProjects/StarForth/
+git submodule add ../StarForth-Governance/ governance
+# Then reference: governance/Reference/FormalVerification/Specifications/
+```
+
+**POC Result:** ✅ VERIFIED (cross-repo access is feasible)
+
+---
+
+=== 4.2 Version Locking for Releases
+
+**Question:** How do we ensure a released binary was verified against a SPECIFIC specification version?
+
+**Scenario:**
+[source]
+....
+Timeline:
+  Oct 31: Build starforth-2.0.0 (verified against VM_Core.thy@abc123)
+  Nov 1:  Update VM_Core.thy to catch new edge case (commit def456)
+
+Problem:
+  Does v2.0.0 claim to satisfy the new VM_Core.thy@def456?
+  NO! Only against @abc123.
+....
+
+**Solution Approaches:**
+
+[cols="1,3,2",width="100%"]
+|===
+| Approach | Mechanism | Risk
+
+| **A: Spec Hash Manifest**
+| PROD pipeline generates SPECIFICATION_MANIFEST.txt with SHA256 of each .thy file at build time; archive with release
+| Requires verification during deployment that current specs match manifest
+
+| **B: Governance Tag**
+| Create git tag in StarForth-Governance when a release is approved: `release-v2.0.0-spec-lock`
+| Adds governance repo overhead; two repos to tag
+
+| **C: Release-Locked Snapshot**
+| Copy .thy files into PROD release directory; archive as immutable record
+| Increases artifact size; duplicates files (violates single-source-of-truth)
+
+| **D: Specification Branch**
+| Maintain separate spec branch for each release: `spec/v2.0.0`, `spec/v2.1.0`
+| Complex branching strategy; hard to manage
+|===
+
+**Recommendation:** **Option A (Spec Hash Manifest)** + governance tags
+
+**Rationale:**
+- Lightweight, just text file
+- Clear audit trail of which specs were used
+- Can be verified post-deployment
+- Governance tags provide additional control point
+
+**Implementation:**
+```groovy
+// In PROD Jenkinsfile post-build:
+sh '''
+  echo "=== Specification Manifest ===" > artifacts/SPECIFICATION_MANIFEST.txt
+  echo "Release Version: ${RELEASE_VERSION}" >> artifacts/SPECIFICATION_MANIFEST.txt
+  echo "Build Date: $(date)" >> artifacts/SPECIFICATION_MANIFEST.txt
+  echo "" >> artifacts/SPECIFICATION_MANIFEST.txt
+  echo "Specification Files:" >> artifacts/SPECIFICATION_MANIFEST.txt
+  cd ../StarForth-Governance/Reference/FormalVerification/Specifications/
+  sha256sum *.thy >> ${WORKSPACE}/artifacts/SPECIFICATION_MANIFEST.txt
+'''
+```
+
+---
+
+=== 4.3 Runtime Monitoring Tooling
+
+**Question:** What tooling do we need to capture and compare execution traces?
+
+**Current State:**
+- Isabelle theories exist but no runtime instrumentation
+- No trace capture mechanism
+- No comparison engine
+
+**Components Needed:**
+
+[cols="1,3,2",width="100%"]
+|===
+| Component | Function | Status
+
+| **Instrumentation**
+| Insert hooks in StarForth VM (vm.c, stack_management.c) to log state at key points (word dispatch, stack ops, memory access)
+| **NOT STARTED** - Requires design of observation points
+
+| **Trace Logger**
+| Collect instrumented events into time-series format (JSON, binary)
+| **NOT STARTED** - Format TBD
+
+| **Spec Parser**
+| Parse Isabelle .thy files to extract predicates/invariants (e.g., "stack_depth ≤ 1024")
+| **COMPLEX** - May need Isabelle ML plugin
+
+| **Trace Validator**
+| Compare captured traces against parsed specs; generate diffs
+| **NOT STARTED** - Algorithm TBD
+
+| **Report Generator**
+| Create RUNTIME_VERIFICATION_REPORT.adoc with results and evidence
+| **NOT STARTED** - Template TBD
+|===
+
+**Challenge:** Parsing Isabelle proofs into executable predicates is **NON-TRIVIAL**
+
+**Alternative Approaches:**
+
+[cols="1,3,2",width="100%"]
+|===
+| Approach | Mechanism | Complexity
+
+| **A: Isabelle ML Plugin**
+| Write Isabelle ML code to extract proofs as executable predicates
+| **HIGH** - Requires deep Isabelle knowledge
+
+| **B: Specification DSL**
+| Create simpler specification format (e.g., JSON) derived from .thy files; maintain both
+| **MEDIUM** - Doubles spec maintenance burden
+
+| **C: Property Testing**
+| Use QuickCheck-style property testing without parsing specs
+| **MEDIUM** - Requires property formulation, not fully automated
+
+| **D: Manual Observation Points**
+| Hand-code trace comparison for specific critical invariants (stack bounds, word dispatch correctness)
+| **MEDIUM** - Targeted, but not comprehensive
+
+| **E: Formal Spec Extraction**
+| Use automated tool (e.g., IsaExplorer, ACL2-to-Python) to extract specs from Isabelle
+| **MEDIUM-HIGH** - Tool-dependent, unproven for this codebase
+|===
+
+**Recommendation:** **Option D (Manual Observation Points)** as MVP
+
+**Rationale:**
+- Identifies most critical invariants first (stack bounds, memory safety)
+- Avoids Isabelle parsing complexity
+- Can incrementally add more checks
+- Results are verifiable and auditable
+
+**MVP Scope:**
+1. Instrument stack operations (overflow/underflow checks)
+2. Instrument word dispatch (verify correct word executed)
+3. Instrument memory access (verify bounds)
+4. Compare traces against simple invariants extracted from .thy comments
+
+**Effort:** ~2-3 weeks for MVP (estimate Section 7)
+
+---
+
+=== 4.4 CI/CD Integration & Pipeline Gate
+
+**Question:** Where does runtime verification fit in the QUAL pipeline, and what's the performance impact?
+
+**Current QUAL Pipeline:**
+```
+Stage 1: Cleanup & Build       (~2 min)
+Stage 2: Smoke Test            (~0.5 min)
+Stage 3: Comprehensive Tests   (~3 min)
+Stage 4: Benchmarks            (~10 min)
+Stage 5: Stress Tests          (~5 min)
+Stage 6: Formal Verification   (~3 min)
+Stage 7: Memory Leak Detection (~3 min)
+Stage 8: Code Quality          (~2 min)
+────────────────────────────────────────
+TOTAL                          (~28.5 min)
+```
+
+**Proposed Runtime Verification Stage:**
+```
+Stage 6.5: Runtime Verification (~? min)
+  - Load .thy specifications
+  - Instrument binary (if not done in Stage 1)
+  - Execute instrumented tests
+  - Capture execution traces
+  - Compare traces vs specs
+  - Generate report
+```
+
+**Performance Estimates:**
+
+[cols="1,2,1",width="100%"]
+|===
+| Scenario | Approach | Time Impact
+
+| **Minimal**
+| Run only smoke tests with minimal instrumentation
+| +2-3 minutes
+
+| **Standard**
+| Run full test suite with comprehensive instrumentation
+| +10-15 minutes
+
+| **Comprehensive**
+| Run tests + benchmarks + stress with all checks
+| +20-30 minutes
+|===
+
+**Decision Matrix:**
+
+[cols="1,2,3,1",width="100%"]
+|===
+| Design | Pros | Cons | Recommendation
+
+| **Option A: Minimal (Phase 1)**
+| Fast; focuses on critical invariants; low risk
+| May miss subtle bugs; not comprehensive
+| ✅ **START HERE**
+
+| **Option B: Standard (Phase 2)**
+| Better coverage; manageable time; good balance
+| Still selective; some gaps possible
+| ⏳ Phase 2 upgrade
+
+| **Option C: Comprehensive (Future)**
+| Full coverage; maximum confidence
+| Expensive; slow CI/CD; may be impractical
+| ❌ **Not recommended for regular CI/CD**
+|===
+
+**Recommendation:** **Option A (Minimal) as MVP**
+
+**Implementation:**
+```groovy
+// In qual/Jenkinsfile, after Stage 5 (Stress Tests), add:
+stage('Runtime Verification - MVP') {
+    steps {
+        timeout(time: 5, unit: 'MINUTES') {
+            sh '''
+                echo "Running runtime verification..."
+
+                # Load specs from governance
+                SPEC_DIR="../StarForth-Governance/Reference/FormalVerification/Specifications"
+
+                # Run minimal instrumentation tests
+                ./build/starforth-instrumented --verify-mode --spec-dir "${SPEC_DIR}" 2>&1 | tee logs/runtime-verify.log
+
+                # Generate report
+                cat > logs/RUNTIME_VERIFICATION_REPORT.adoc << EOF
+                = Runtime Verification Report (Build ${BUILD_NUMBER})
+                ...
+                EOF
+            '''
+        }
+    }
+}
+```
+
+**Total Pipeline Time (with MVP):** ~32-35 minutes (acceptable)
+
+---
+
+=== 4.5 Governance Workflow Integration
+
+**Question:** What happens when runtime verification finds a mismatch?
+
+**Current Governance Flow:**
+```
+QUAL PASS → PM Review → PROD Release → Master
+QUAL FAIL → Auto-CAPA  → Devl Review → Resubmit
+```
+
+**Runtime Verification Scenarios:**
+
+[cols="1,2,3",width="100%"]
+|===
+| Scenario | Action | CAPA Handling
+
+| **Specs Missing**
+| Error: Specs not found at expected path
+| QUAL FAIL - Generate ENVIRONMENT_CAPA; block release
+
+| **Specs Parse Error**
+| Error: .thy file format issue
+| QUAL FAIL - Generate SPECIFICATION_CAPA; notify governance
+
+| **Trace Mismatch**
+| QUAL runs but finds behavior deviation
+| QUAL FAIL - Generate RUNTIME_MISMATCH_CAPA with evidence
+
+| **Transient Failure**
+| Trace invalid (timing, flakiness)
+| QUAL FAIL - Generate FLAKINESS_CAPA; recommend retry
+
+| **All Checks Pass**
+| No mismatch found
+| QUAL PASS - Proceed to PM review
+|===
+
+**Governance Integration Points:**
+
+[cols="1,3",width="100%"]
+|===
+| Point | Action
+
+| **QUAL Failure (Spec Missing)**
+| - Auto-generate CAPA-SPEC-{N}: "Runtime Verification - Missing Specifications"
+| - Route to PM + Formal Verification Authority
+| - Block PROD until resolved
+
+| **QUAL Failure (Spec Parse Error)**
+| - Auto-generate CAPA-SPEC-{N}: "Runtime Verification - Specification Format Error"
+| - Route to Formal Verification Authority + Governance Lead
+| - Root cause: Usually a spec file corruption or version mismatch
+
+| **QUAL Failure (Trace Mismatch)**
+| - Auto-generate CAPA-RUNTIME-{N}: "Runtime Verification - Behavior Deviation"
+| - Include evidence: execution trace, expected vs actual, diff
+| - Route to devL team + QA
+| - Block PROD until C code fixed or spec updated (governance decision)
+
+| **QUAL Success**
+| - Generate RUNTIME_VERIFICATION_REPORT.adoc (evidence)
+| - Archive to in_basket/QUAL-Build-{N}/runtime_verification/
+| - Notify PM: "Ready for release approval"
+|===
+
+**Recommendation:** Integrate with existing CAPA auto-generation
+
+**Implementation:**
+```groovy
+// In qual/Jenkinsfile post section:
+if (buildResult == "FAILURE" && runtimeVerifyFailed) {
+    def capaType = runtimeVerifyMismatch ? "RUNTIME-MISMATCH" : "SPEC-ERROR"
+    sh '''
+        cat > docs/internal/capa/CAPA-${capaType}-${TIMESTAMP}.adoc << EOF
+        = CAPA: Runtime Verification Failure
+
+        == Defect
+        Runtime verification stage detected behavior mismatch
+
+        == Evidence
+        $(cat logs/runtime-verify.log)
+
+        == Impact
+        QUAL pipeline FAILED - Release blocked
+
+        == Required Action
+        Review trace diff; update C code or specification
+        EOF
+    '''
+}
+```
+
+**Escalation Path:**
+```
+Runtime Mismatch Detected
+    ↓
+Auto-CAPA Generated → in_basket
+    ↓
+Governance Pipeline Routes to Devl + QA
+    ↓
+Devl: Fix C code OR Governance: Update spec (ECR decision)
+    ↓
+Re-submit to QUAL
+    ↓
+Runtime Verification Re-runs
+    ↓
+QUAL PASS → PM Review → PROD
+```
+
+---
+
+== 5. Architectural Decisions
+
+[cols="1,3",width="100%"]
+|===
+| Decision | Rationale
+
+| **Single Source of Truth**
+| .thy files live ONLY in StarForth-Governance/Reference/FormalVerification/Specifications/; StarForth references them at build time
+
+| **Spec Hash Manifest**
+| PROD pipeline locks spec versions via SHA256 hashes; prevents retroactive claims of verification
+
+| **Manual Observation Points (MVP)**
+| Start with hand-coded trace checks for critical invariants; avoid Isabelle parsing complexity
+
+| **Minimal Runtime Verification (Phase 1)**
+| Focus on smoke tests + critical invariants; keep pipeline time under 35 minutes
+
+| **Auto-CAPA on Mismatch**
+| Any runtime verification failure auto-generates CAPA with evidence; blocks PROD
+
+| **Git Submodule (Future)**
+| Migrate StarForth-Governance to formal git submodule for cleaner dependency management
+|===
+
+---
+
+== 6. Implementation Roadmap
+
+=== Phase 1 (MVP) - Critical Path
+**Duration:** ~4-5 weeks | **Effort:** ~200 hours
+
+[cols="1,2,1",width="100%"]
+|===
+| Task | Deliverable | Effort
+
+| **1.1 Spec Consolidation**
+| Move .thy files to StarForth-Governance/Reference/FormalVerification/Specifications/ (✅ DONE)
+| ~4 hours
+
+| **1.2 QUAL Pipeline Integration**
+| Modify QUAL Jenkinsfile to fetch specs from governance repo
+| ~8 hours
+
+| **1.3 Observation Points**
+| Identify 5-7 critical invariants to check (stack bounds, word dispatch, memory safety)
+| ~16 hours
+
+| **1.4 Instrumentation (C Code)**
+| Add trace-logging hooks at observation points in vm.c, stack_management.c
+| ~40 hours
+
+| **1.5 Trace Logger**
+| Capture instrumented events to file (format: JSON or text)
+| ~20 hours
+
+| **1.6 Trace Validator**
+| Compare captured traces against hardcoded predicates
+| ~30 hours
+
+| **1.7 Report Generator**
+| Generate RUNTIME_VERIFICATION_REPORT.adoc with results
+| ~16 hours
+
+| **1.8 CAPA Integration**
+| Auto-generate CAPA on trace mismatch; integrate with governance workflow
+| ~24 hours
+
+| **1.9 Testing & Validation**
+| Test with various test suites; validate trace output
+| ~32 hours
+
+| **1.10 Documentation**
+| Update CLAUDE.md, Jenkinsfile comments, governance docs
+| ~14 hours
+|===
+
+**Total Phase 1: ~204 hours (~5 weeks @ 40 hrs/week)**
+
+---
+
+=== Phase 2 (Enhancement) - Incremental Improvement
+**Duration:** ~3-4 weeks | **Effort:** ~120 hours
+
+- [ ] Extend trace checks from 5 to 15+ invariants
+- [ ] Implement Isabelle ML plugin to extract specs automatically
+- [ ] Create DSL for specification assertions
+- [ ] Validate against more complex scenarios (benchmarks, stress tests)
+
+---
+
+=== Phase 3 (Optimization) - Full Coverage
+**Duration:** ~6-8 weeks | **Effort:** ~240 hours
+
+- [ ] Comprehensive trace validation (all code paths)
+- [ ] Performance optimization (reduce trace overhead)
+- [ ] Formal integration with Isabelle proof checker
+- [ ] Evidence archival and reporting enhancements
+
+---
+
+== 7. Effort & Timeline Estimation
+
+=== Summary
+
+[cols="1,1,1,1",width="100%"]
+|===
+| Phase | Duration | Effort | Dependencies
+
+| **Phase 1 (MVP)**
+| 4-5 weeks
+| ~200 hours
+| QUAL pipeline infrastructure
+
+| **Phase 2 (Enhancement)**
+| 3-4 weeks
+| ~120 hours
+| Phase 1 complete
+
+| **Phase 3 (Full Coverage)**
+| 6-8 weeks
+| ~240 hours
+| Phase 2 complete
+
+| **Total**
+| 13-17 weeks
+| ~560 hours
+| -
+|===
+
+=== Resource Requirements
+
+[cols="1,2",width="100%"]
+|===
+| Role | Involvement
+
+| **Formal Verification Authority** (you)
+| Phase 1.2, 1.3, 2.1 (spec consolidation, observation point selection, approval) - ~30 hours
+
+| **C Developer**
+| Phase 1.4, 1.5, 1.6, 1.9 (instrumentation, trace logger, validator, testing) - ~150 hours
+
+| **Isabelle Expert** (if available)
+| Phase 2.2, 3.1 (ML plugin, formal integration) - ~80 hours (or can defer to Phase 3)
+
+| **QA/Governance Lead**
+| Phase 1.8, 1.10 (CAPA integration, documentation) - ~30 hours
+
+| **Jenkins Infrastructure**
+| Phase 1.2 (QUAL pipeline modification) - ~8 hours
+|===
+
+=== Timeline Assumptions
+
+- 40 hours per week available
+- No competing high-priority work
+- Isabelle expert availability (can defer to Phase 2)
+- Access to formal verification authority for approvals
+
+---
+
+== 8. Known Risks & Mitigation
+
+[cols="1,2,2",width="100%"]
+|===
+| Risk | Impact | Mitigation
+
+| **Spec Parsing Complexity**
+| Phase 2 ML plugin may be difficult; could delay to Phase 3
+| Defer to Phase 3; use manual hardcoding in Phase 1 MVP
+
+| **Trace Volume**
+| Capturing all executions could generate large logs; impact disk space
+| Implement sampling strategy; only log critical operations
+
+| **Flaky Tests**
+| Timing-dependent traces may be non-deterministic; false failures
+| Design idempotent predicates; use statistical validation
+
+| **Isabelle Theory Changes**
+| Future spec updates may require trace validator changes
+| Version lock specs to releases (SPECIFICATION_MANIFEST.txt)
+
+| **Governance Workflow Complexity**
+| Integrating runtime verification CAPAs may burden governance process
+| Auto-generate only critical mismatch CAPAs; archive others
+
+| **Performance Regression**
+| Instrumentation overhead may slow QUAL pipeline significantly
+| Minimize overhead; use conditional instrumentation
+|===
+
+---
+
+== 9. Success Criteria
+
+=== Acceptance Criteria (Phase 1 MVP)
+
+- [ ] .thy files successfully consolidated in StarForth-Governance/Reference/FormalVerification/Specifications/
+- [ ] QUAL pipeline successfully fetches specs at build time (no manual intervention)
+- [ ] At least 5 critical invariants instrumented and validated
+- [ ] Runtime verification stage completes in ≤ 10 minutes
+- [ ] Trace mismatch triggers automatic CAPA generation
+- [ ] Evidence properly archived to in_basket for governance review
+- [ ] Zero false negatives (all actual mismatches detected)
+- [ ] Zero false positives (no incorrect failure reports)
+- [ ] All new functionality documented in CLAUDE.md and Jenkinsfile comments
+- [ ] PM and QA sign off on governance integration
+
+=== Quality Gates
+
+[cols="1,2",width="100%"]
+|===
+| Gate | Threshold
+
+| **Trace Coverage**
+| ≥ 80% of code paths exercised by instrumented tests
+
+| **Mismatch Detection**
+| 100% of intentional specification violations detected
+
+| **False Positive Rate**
+| ≤ 2% (acceptable for MVP; Phase 2 target: ≤ 0.5%)
+
+| **Pipeline Performance**
+| QUAL runtime increase ≤ 20% (target: ≤ 15%)
+
+| **Documentation**
+| All architecture decisions documented in this spec
+|===
+
+---
+
+== 10. Open Questions for User
+
+Before proceeding to Phase 1 implementation, please clarify:
+
+1. **Specification Parsing:**
+   Should we attempt Isabelle ML plugin in Phase 1 (high effort, high benefit) or defer to Phase 2 (lower risk, manual hardcoding initially)?
+
+2. **Observation Points:**
+   Which 5-7 invariants are MOST CRITICAL to verify first? (e.g., stack overflow/underflow, word dispatch correctness, memory bounds?)
+
+3. **Trace Artifacts:**
+   Should execution traces be archived in full (potentially GBs) or summarized (smaller, but less detail)?
+
+4. **Governance Escalation:**
+   For trace mismatches, should we auto-generate CAPA immediately or require PM approval first?
+
+5. **Testing Strategy:**
+   Should runtime verification run on every QUAL build or only before releases (to reduce pipeline time)?
+
+6. **Failure Recovery:**
+   If runtime verification fails, can devL team re-run QUAL without waiting, or does each failure require PM review?
+
+---
+
+== 11. References & Related Documents
+
+[cols="1,2",width="100%"]
+|===
+| Document | Purpose
+
+| `StarForth-Governance/SIGNATURE_TRACKING.adoc`
+| Master control for specification esignature requirements
+
+| `StarForth-Governance/Reference/FormalVerification/REFINEMENT_CAPA.adoc`
+| Defect tracking for C ⊑ Isabelle refinement; context for runtime verification failures
+
+| `StarForth-Governance/Reference/FormalVerification/REFINEMENT_ROADMAP.adoc`
+| Formal verification phases; runtime verification fits Phase 2-3
+
+| `StarForth/CLAUDE.md`
+| Developer guide; will be updated with runtime verification procedures
+
+| `StarForth/jenkinsfiles/qual/Jenkinsfile`
+| QUAL pipeline definition; will add runtime verification stage
+
+| `GitHub Issue #36 (CAPA-034)`
+| Governance tracking for this architectural design
+|===
+
+---
+
+== Appendix A: Specification File Inventory
+
+Current .thy files (9 files):
+
+[cols="1,2,1",width="100%"]
+|===
+| File | Purpose | Lines
+
+| `VM_Core.thy`
+| Core virtual machine semantics
+| ~250
+
+| `VM_Stacks.thy`
+| Stack operations and state management
+| ~400
+
+| `VM_DataStack_Words.thy`
+| Data stack word implementations
+| ~800
+
+| `VM_ReturnStack_Words.thy`
+| Return stack word implementations
+| ~250
+
+| `VM_Words.thy`
+| Word definition and dispatch semantics
+| ~600
+
+| `VM_Register.thy`
+| Register/memory semantics
+| ~150
+
+| `VM_StackRuntime.thy`
+| Stack runtime execution model
+| ~550
+
+| `Physics_StateMachine.thy`
+| State machine physics model
+| ~150
+
+| `Physics_Observation.thy`
+| Observation trace semantics
+| ~50
+|===
+
+**Total: ~3,200 lines of formal specifications**
+
+---
+
+== Appendix B: Observation Points (Proposed MVP)
+
+Critical invariants for Phase 1 MVP:
+
+[cols="1,2,3",width="100%"]
+|===
+| Invariant | Check | Observation Point
+
+| **Stack Overflow**
+| `data_stack_ptr < STACK_SIZE`
+| `stack_management.c: push_data_stack()`
+
+| **Stack Underflow**
+| `data_stack_ptr ≥ 0`
+| `stack_management.c: pop_data_stack()`
+
+| **Return Stack Overflow**
+| `return_stack_ptr < STACK_SIZE`
+| `stack_management.c: push_return_stack()`
+
+| **Return Stack Underflow**
+| `return_stack_ptr ≥ 0`
+| `stack_management.c: pop_return_stack()`
+
+| **Word Dispatch**
+| `word_found && correct_implementation`
+| `vm.c: vm_interpret()`
+
+| **Memory Bounds**
+| `address ∈ [0, VM_MEMORY_SIZE)`
+| `memory_management.c: vm_fetch(), vm_store()`
+
+| **Dictionary Integrity**
+| `dictionary_entry_valid(entry)`
+| `vm.c: dictionary_lookup()`
+|===
+
+---
+
+== Document Control
+
+[cols="1,2",width="100%"]
+|===
+| Item | Value
+
+| **Document ID**
+| RUNTIME_VERIFICATION_ARCHITECTURE.adoc
+
+| **Version**
+| 1.0 (Draft)
+
+| **Date**
+| 2025-10-31
+
+| **Status**
+| Design Phase (CAPA-034)
+
+| **Author**
+| Claude Code (with user input)
+
+| **Approval Required**
+| Formal Verification Authority, PM, Governance Lead
+
+| **Last Modified**
+| 2025-10-31
+
+| **Classification**
+| Governance / Architecture (Controlled Document)
+|===
+
+---
+
+**End of Document**

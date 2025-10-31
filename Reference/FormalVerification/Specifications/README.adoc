@@ -1,0 +1,81 @@
+= Formal Verification Specifications
+:toc:
+
+== Overview
+
+This directory contains the **controlled, master specification** for StarForth's formal verification effort.
+
+These Isabelle/HOL theories define the mathematical specification of:
+- Virtual machine core semantics
+- Stack operations (data & return)
+- Word definition and dispatch
+- Physics observation and state machine models
+
+== Important: Version Control & Governance
+
+[IMPORTANT]
+====
+These .thy files are:
+- **CONTROLLED DOCUMENTS** requiring esignature approval
+- **SINGLE SOURCE OF TRUTH** for all formal verification efforts
+- **REFERENCED BY runtime verification** instruments in StarForth CI/CD
+- **NOT DUPLICATED** in the main StarForth repository
+
+Changes to specifications must follow the ECR/CAPA governance process.
+====
+
+== File Manifest
+
+- `VM_Core.thy` - Core virtual machine semantics
+- `VM_Stacks.thy` - Stack operations and state management
+- `VM_DataStack_Words.thy` - Data stack word implementations
+- `VM_ReturnStack_Words.thy` - Return stack word implementations
+- `VM_Words.thy` - Word definition and dispatch semantics
+- `VM_Register.thy` - Register/memory semantics
+- `VM_StackRuntime.thy` - Stack runtime execution model
+- `Physics_StateMachine.thy` - State machine physics model
+- `Physics_Observation.thy` - Observation trace semantics
+- `ROOT` - Isabelle theory manifest
+
+== Usage in CI/CD
+
+The QUAL pipeline references these specifications for:
+
+1. **Static Verification**: Isabelle/HOL proof compilation
+2. **Runtime Verification**: Trace comparison against specification
+
+Example from QUAL Jenkinsfile:
+[source,groovy]
+----
+SPEC_DIR="../StarForth-Governance/Reference/FormalVerification/Specifications"
+isabelle build -d "${SPEC_DIR}" -v
+----
+
+== Signature Status
+
+See `StarForth-Governance/SIGNATURE_TRACKING.adoc` for esignature requirements.
+
+Each specification file requires approval from:
+- **Formal Verification Authority** (your role)
+- **QA Lead** (compliance verification)
+- **PM** (release approval)
+
+== Version History
+
+[width="100%",options="header"]
+|===
+| Version | Date | Description | Status
+| 1.0 | TBD | Initial specifications migrated from StarForth | PENDING_SIGNATURE
+|===
+
+== Related Documents
+
+- `REFINEMENT_CAPA.adoc` - Defect tracking for C ⊑ Isabelle refinement
+- `REFINEMENT_ROADMAP.adoc` - Formal verification phases
+- `REFINEMENT_ANNOTATIONS.adoc` - Detailed refinement notes
+
+---
+
+**Last Updated:** 2025-10-31
+**Location:** StarForth-Governance/Reference/FormalVerification/Specifications/
+**Governance:** Controlled Document (ECR/CAPA required for changes)

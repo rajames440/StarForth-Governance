@@ -1,0 +1,12 @@
+in_basket Governance References Index
+=====================================
+Generated: Fri Oct 31 09:25:22 AM EDT 2025
+
+Contents:
+- GOVERNANCE_MANIFEST_MIGRATION.adoc: Master migration tracking document
+- remaining_governance/: Any governance files that weren't captured in initial migration
+- remaining_internal/: Any internal working files that weren't captured
+- remaining_isabelle/: Any formal verification files that weren't captured
+
+These documents were archived during final cleanup phase.
+Purpose: Historical reference and compliance auditing

@@ -1,0 +1,666 @@
+////
+GOVERNANCE CONSOLIDATION MANIFEST & DUPLICATION ANALYSIS
+Prepared: 2025-10-31
+Purpose: Track all documents to be copied to StarForth-Governance with duplication analysis and signature requirements
+////
+
+= StarForth Governance Document Manifest & Migration Plan
+
+**Document ID:** GOVERNANCE_MANIFEST_MIGRATION
+**Version:** 1.0.0
+**Prepared:** 2025-10-31
+**Status:** DRAFT - Awaiting User Review & Approval
+
+---
+
+== MANIFEST OVERVIEW
+
+Total Documents to Migrate: 41 files across 7 tiers
+
+[cols="1,2,1,2", options="header"]
+|===
+| Tier | Category | Count | Destination in StarForth-Governance
+| 1 | Process Documents | 6 | Reference/Processes/
+| 2 | Defect Tracking | 2 | Validation/SHARED/DEFECT_LOG/
+| 3 | Foundation Policies | 5 | Reference/Foundation/
+| 4 | Process Chapters | 9 | Reference/Processes/Chapters/
+| 5 | Physics/Internal | 7 | Reference/Physics/
+| 6 | Formal Verification | 13 | Reference/FormalVerification/
+| 7 | Jenkins Infrastructure | 5 | Reference/Infrastructure/Jenkins/
+|===
+
+---
+
+== TIER 1: GOVERNANCE PROCESS DOCUMENTS (6 files)
+
+Location: StarForth-Governance/Reference/Processes/
+
+=== Document: CAPA_PROCESS
+
+**Source File:** `docs/CAPA_PROCESS.md`
+**Duplicate Status:** ⚠️ PARTIAL DUPLICATION
+**Duplication Details:**
+- Source format: Markdown (developer-friendly)
+- Duplicate in: `docs/src/governance/chapters/03-CAPA_PROCESS.adoc` (formal governance version)
+- Difference: MD version is developer-focused workflow; AsciiDoc version is formal process with QA/PM approval gates
+- Recommendation: MERGE - Keep AsciiDoc formal version, add developer workflow section to it
+- Merged into: `Reference/Processes/03-CAPA_PROCESS.adoc` (already prepared)
+
+**Signature Required:** NO
+**Target Format:** AsciiDoc
+
+---
+
+=== Document: PR_WORKFLOW
+
+**Source File:** `docs/PR_WORKFLOW.md`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Developer guide for creating and managing pull requests
+**Content:**
+- Step-by-step PR creation process
+- GitHub workflow integration
+- Automated checks and review process
+- Post-merge pipeline execution
+
+**Signature Required:** NO
+**Target Format:** Markdown (keep as developer guide, reference from governance)
+**Destination:** StarForth/docs/ (KEEP IN MAIN REPO - Developer guide)
+
+---
+
+=== Document: BRANCH_PROTECTION_GUIDE
+
+**Source File:** `docs/BRANCH_PROTECTION_GUIDE.md`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** GitHub branch protection rule configuration guide
+**Content:**
+- Branch protection rule setup
+- Access control configuration
+- Protected branch enforcement
+- Audit trail logging
+
+**Signature Required:** NO
+**Target Format:** Markdown → AsciiDoc (convert for consistency)
+**Destination:** `Reference/Processes/BRANCH_PROTECTION_GUIDE.adoc`
+
+---
+
+=== Document: GITHUB_ACTIONS_SETUP
+
+**Source File:** `docs/GITHUB_ACTIONS_SETUP.md`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** GitHub Actions automation workflow configuration
+**Content:**
+- Kanban automation triggers
+- PR lifecycle automation
+- Release approval workflows
+- Status monitoring setup
+
+**Signature Required:** NO
+**Target Format:** Markdown → AsciiDoc (convert for consistency)
+**Destination:** `Reference/Processes/GITHUB_ACTIONS_SETUP.adoc`
+
+---
+
+=== Document: WORKFLOW (CI/CD Workflow)
+
+**Source File:** `docs/WORKFLOW.md`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Complementary to:** `docs/JENKINS_PIPELINE_GUIDE.adoc`
+**Difference:**
+- WORKFLOW.md = High-level branch workflow (devL → test → qual → prod → master)
+- JENKINS_PIPELINE_GUIDE.adoc = Technical pipeline stages (Build Gauntlet, Smoke Tests, etc.)
+
+**Description:** CI/CD workflow overview with branch strategy
+**Content:**
+- Trunk-based development strategy
+- Branch purposes and durations
+- Workflow flow diagrams
+- CAPA integration points
+
+**Signature Required:** NO
+**Target Format:** Markdown → AsciiDoc (convert for consistency)
+**Destination:** `Reference/Processes/CI_CD_WORKFLOW.adoc`
+
+---
+
+=== Document: JENKINS_PIPELINE_GUIDE
+
+**Source File:** `docs/JENKINS_PIPELINE_GUIDE.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Complementary to:** `docs/WORKFLOW.md`
+**Description:** Jenkins pipeline architecture and technical details
+**Content:**
+- Pipeline stages and flow
+- Artifact management
+- Log organization
+- Pipeline variants (dev, test, qa, prod)
+
+**Signature Required:** NO
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Infrastructure/JENKINS_PIPELINE_GUIDE.adoc`
+
+---
+
+== TIER 2: DEFECT TRACKING & CAPA INVENTORY (2 files)
+
+Location: StarForth-Governance/Validation/SHARED/DEFECT_LOG/
+
+=== Document: COMPREHENSIVE_DEFECTS_FOR_CAPA
+
+**Source File:** `docs/COMPREHENSIVE_DEFECTS_FOR_CAPA.md`
+**Duplicate Status:** ⚠️ SUPERSET RELATIONSHIP
+**Duplication Details:**
+- This is comprehensive list of 33 CAPAs
+- Related to: `IDENTIFIED_DEFECTS_FOR_CAPA.md` (Phase 1 & 2 subset)
+- Relationship: COMPREHENSIVE contains all; IDENTIFIED contains first 7
+- Recommendation: KEEP BOTH - One is complete inventory, one is historical Phase 1/2 snapshot
+- Content: 33 defect/CAPA entries with severity, type, phase, acceptance criteria
+
+**Signature Required:** YES - Requires PM signature (QA/PM joint document)
+**Target Format:** Markdown → AsciiDoc (convert)
+**Destination:** `Validation/SHARED/DEFECT_LOG/COMPREHENSIVE_DEFECTS_MASTER.adoc`
+**Signature Location:** End of document with date/stamp
+
+---
+
+=== Document: IDENTIFIED_DEFECTS_FOR_CAPA
+
+**Source File:** `docs/IDENTIFIED_DEFECTS_FOR_CAPA.md`
+**Duplicate Status:** ⚠️ SUBSET RELATIONSHIP
+**Duplication Details:**
+- This is Phase 1 & 2 defects from audit
+- Subset of COMPREHENSIVE_DEFECTS_FOR_CAPA.md
+- Recommendation: KEEP AS HISTORICAL - Archive as "Phase_1_2_Initial_Assessment.adoc"
+- Content: 7 defects from original codebase audit
+
+**Signature Required:** YES - Historical audit document
+**Target Format:** Markdown → AsciiDoc
+**Destination:** `Validation/SHARED/DEFECT_LOG/Phase_1_2_Initial_Assessment.adoc`
+**Signature Location:** End of document with audit date/stamp
+
+---
+
+== TIER 3: GOVERNANCE FOUNDATION DOCUMENTS (5 files)
+
+Location: StarForth-Governance/Reference/Foundation/
+
+=== Document: GOVERNANCE_REFERENCE_MANUAL
+
+**Source File:** `docs/src/governance/GOVERNANCE_REFERENCE_MANUAL.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Master governance document that references all chapters
+**Content:**
+- Overview of governance framework
+- Links to all process chapters
+- Document hierarchy
+- Master index
+
+**Signature Required:** YES - Governance policy document
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Foundation/GOVERNANCE_REFERENCE_MANUAL.adoc`
+**Signature Location:** After introduction with PM approval section
+
+---
+
+=== Document: QUALITY_POLICY
+
+**Source File:** `docs/src/governance/QUALITY_POLICY.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Quality objectives and standards for StarForth
+**Content:**
+- Quality vision statement
+- Quality objectives (reliability, security, maintainability)
+- Acceptance criteria
+- Measurement methods
+
+**Signature Required:** YES - Quality policy requires PM/QA signatures
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Foundation/QUALITY_POLICY.adoc`
+**Signature Location:** Approval table at end of document
+
+---
+
+=== Document: SECURITY_POLICY
+
+**Source File:** `docs/src/governance/SECURITY_POLICY.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Security requirements and procedures
+**Content:**
+- Security objectives
+- Vulnerability reporting procedures
+- Patch management process
+- Security review requirements
+
+**Signature Required:** YES - Security policy document
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Foundation/SECURITY_POLICY.adoc`
+**Signature Location:** Approval section at end
+
+---
+
+=== Document: TEST_STRATEGY
+
+**Source File:** `docs/src/governance/TEST_STRATEGY.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Testing approach and strategy
+**Content:**
+- Test objectives
+- Test categories (unit, integration, formal, performance)
+- Success criteria
+- Coverage requirements
+
+**Signature Required:** YES - QA policy document
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Foundation/TEST_STRATEGY.adoc`
+**Signature Location:** QA approval section
+
+---
+
+=== Document: QUALITY_CHARACTERISTICS
+
+**Source File:** `docs/src/governance/QUALITY_CHARACTERISTICS.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** ISO 25010 quality characteristics mapping
+**Content:**
+- Quality characteristic dimensions
+- StarForth-specific mappings
+- Measurement criteria
+- Acceptance thresholds
+
+**Signature Required:** NO - Reference document
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Foundation/QUALITY_CHARACTERISTICS.adoc`
+
+---
+
+== TIER 4: DETAILED PROCESS CHAPTERS (9 files)
+
+Location: StarForth-Governance/Reference/Processes/Chapters/
+
+All located in `docs/src/governance/chapters/`
+
+=== Document: 01-ECR_PROCESS
+
+**Source:** `docs/src/governance/chapters/01-ECR_PROCESS.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Engineering Change Request process
+**Content:** ECR lifecycle, approval gates, PM review criteria
+
+**Signature Required:** YES - Process definition requires PM approval
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Processes/Chapters/01-ECR_PROCESS.adoc`
+
+---
+
+=== Document: 02-ECO_PROCESS
+
+**Source:** `docs/src/governance/chapters/02-ECO_PROCESS.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Engineering Change Order process
+**Signature Required:** YES - Process definition
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Processes/Chapters/02-ECO_PROCESS.adoc`
+
+---
+
+=== Document: 03-CAPA_PROCESS
+
+**Source:** `docs/src/governance/chapters/03-CAPA_PROCESS.adoc`
+**Duplicate Status:** ⚠️ PARTIAL DUPLICATION (with docs/CAPA_PROCESS.md)
+**Description:** Corrective/Preventive Action process - FORMAL VERSION
+**Note:** Has developer workflow from docs/CAPA_PROCESS.md merged in
+**Signature Required:** YES - Process definition
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Processes/Chapters/03-CAPA_PROCESS.adoc`
+
+---
+
+=== Document: 04-FMEA_PROCESS
+
+**Source:** `docs/src/governance/chapters/04-FMEA_PROCESS.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Failure Mode & Effects Analysis process
+**Signature Required:** YES - QA process definition
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Processes/Chapters/04-FMEA_PROCESS.adoc`
+
+---
+
+=== Document: 05-CROSS_REFERENCE_GUIDE
+
+**Source:** `docs/src/governance/chapters/05-CROSS_REFERENCE_GUIDE.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Traceability and cross-reference matrix guide
+**Signature Required:** NO - Reference guide
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Processes/Chapters/05-CROSS_REFERENCE_GUIDE.adoc`
+
+---
+
+=== Document: 06-SIGNATORY_MATRIX
+
+**Source:** `docs/src/governance/chapters/06-SIGNATORY_MATRIX.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Approval authority and signatory matrix
+**Signature Required:** NO - Reference matrix
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Processes/Chapters/06-SIGNATORY_MATRIX.adoc`
+
+---
+
+=== Document: 07-PM_CHECKLIST_TEMPLATE
+
+**Source:** `docs/src/governance/chapters/07-PM_CHECKLIST_TEMPLATE.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** PM ECR review checklist template
+**Signature Required:** NO - Reusable template (signature per use, not on template)
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Processes/Chapters/07-PM_CHECKLIST_TEMPLATE.adoc`
+
+---
+
+=== Document: 08-QA_CHECKLIST_TEMPLATE
+
+**Source:** `docs/src/governance/chapters/08-QA_CHECKLIST_TEMPLATE.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** QA FMEA review checklist template
+**Signature Required:** NO - Reusable template
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Processes/Chapters/08-QA_CHECKLIST_TEMPLATE.adoc`
+
+---
+
+=== Document: 09-THEORY_JUSTIFICATION_GUIDE
+
+**Source:** `docs/src/governance/chapters/09-THEORY_JUSTIFICATION_GUIDE.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Isabelle proof theory justification requirements
+**Signature Required:** YES - Formal verification policy
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Processes/Chapters/09-THEORY_JUSTIFICATION_GUIDE.adoc`
+
+---
+
+== TIER 5: PHYSICS/INTERNAL WORKING DOCUMENTS (7 files)
+
+Location: StarForth-Governance/Reference/Physics/
+
+=== Document: HOLA_PROTOCOL
+
+**Source:** `docs/src/internal/HOLA_PROTOCOL.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** HOLA runtime protocol specification for physics scheduling
+**Content:** Protocol definition, message formats, state machines
+**Signature Required:** NO - Technical specification
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Physics/HOLA_PROTOCOL.adoc`
+
+---
+
+=== Document: PHYSICS_SCHEDULING_PLAN
+
+**Source:** `docs/src/internal/PHYSICS_SCHEDULING_PLAN.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Physics scheduler implementation plan
+**Signature Required:** NO - Technical planning document
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Physics/PHYSICS_SCHEDULING_PLAN.adoc`
+
+---
+
+=== Document: PHYSICS_SIGNAL_MAP
+
+**Source:** `docs/src/internal/PHYSICS_SIGNAL_MAP.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Physics signal and telemetry mapping
+**Signature Required:** NO - Technical reference
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Physics/PHYSICS_SIGNAL_MAP.adoc`
+
+---
+
+=== Document: VM_FORMALIZATION_PLAN
+
+**Source:** `docs/src/internal/VM_FORMALIZATION_PLAN.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** VM formalization and Isabelle proof plan
+**Signature Required:** NO - Technical planning document
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Physics/VM_FORMALIZATION_PLAN.adoc`
+
+---
+
+=== Document: GOVERNANCE_EXPORT_NOTES
+
+**Source:** `docs/src/internal/GOVERNANCE_EXPORT_NOTES.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Meta-document: guidance for exporting physics docs to governance
+**Content:** Checklist of what needs to be mirrored to governance repo
+**Signature Required:** NO - Internal process note
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Physics/GOVERNANCE_EXPORT_NOTES.adoc`
+
+---
+
+=== Document: SHARED_CLAUDE
+
+**Source:** `docs/src/internal/SHARED_CLAUDE.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Internal team communication guide for StarForth working group
+**Content:** Communication protocols, audience guides, metaphors
+**Signature Required:** NO - Internal guidance
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Physics/SHARED_CLAUDE.adoc`
+
+---
+
+=== Document: COMMUNICATION_GUIDE
+
+**Source:** `docs/src/internal/COMMUNICATION_GUIDE.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Internal communication guide and crib sheet
+**Signature Required:** NO - Internal reference
+**Target Format:** AsciiDoc
+**Destination:** `Reference/Physics/COMMUNICATION_GUIDE.adoc`
+
+---
+
+== TIER 6: FORMAL VERIFICATION DOCUMENTS (13 files)
+
+Location: StarForth-Governance/Reference/FormalVerification/
+
+=== Document: REFINEMENT_CAPA
+
+**Source:** `docs/REFINEMENT_CAPA.adoc`
+**Duplicate Status:** ⚠️ OVERLAPS WITH COMPREHENSIVE_DEFECTS
+**Duplication Details:**
+- REFINEMENT_CAPA = C↔Isabelle refinement defects (formal verification issues)
+- COMPREHENSIVE_DEFECTS = All CAPAs including code/doc/build defects
+- Relationship: REFINEMENT_CAPA is subset focused on formal verification gaps
+- Recommendation: KEEP BOTH - Different tracking purposes
+- REFINEMENT tracks formal proof refinement; COMPREHENSIVE tracks all defects
+
+**Signature Required:** YES - Formal verification tracking document
+**Target Format:** AsciiDoc
+**Destination:** `Reference/FormalVerification/REFINEMENT_CAPA.adoc`
+
+---
+
+=== Document: REFINEMENT_ANNOTATIONS
+
+**Source:** `docs/REFINEMENT_ANNOTATIONS.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Code annotation standards for Isabelle refinement
+**Content:** Annotation syntax, patterns for different function types, cross-references
+**Signature Required:** NO - Technical standard
+**Target Format:** AsciiDoc
+**Destination:** `Reference/FormalVerification/REFINEMENT_ANNOTATIONS.adoc`
+
+---
+
+=== Document: REFINEMENT_ROADMAP
+
+**Source:** `docs/REFINEMENT_ROADMAP.adoc`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** C↔Isabelle refinement implementation roadmap (3 phases)
+**Signature Required:** NO - Planning document
+**Target Format:** AsciiDoc
+**Destination:** `Reference/FormalVerification/REFINEMENT_ROADMAP.adoc`
+
+---
+
+=== Isabelle Formal Verification Files (10 files)
+
+**Source Directory:** `docs/src/isabelle/` and `docs/src/internal/formal/`
+
+All files in these directories should be migrated:
+- `docs/src/isabelle/index.adoc`
+- `docs/src/isabelle/Physics_Observation.adoc`
+- `docs/src/isabelle/Physics_StateMachine.adoc`
+- `docs/src/isabelle/VERIFICATION_REPORT.adoc`
+- `docs/src/isabelle/VM_Core.adoc`
+- `docs/src/isabelle/VM_DataStack_Words.adoc`
+- `docs/src/isabelle/VM_Register.adoc`
+- `docs/src/isabelle/VM_ReturnStack_Words.adoc`
+- `docs/src/isabelle/VM_StackRuntime.adoc`
+- `docs/src/isabelle/VM_Stacks.adoc`
+- `docs/src/isabelle/VM_Words.adoc`
+- Plus any files in `docs/src/internal/formal/`
+
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Signature Required:** NO - Technical proof documentation
+**Target Format:** AsciiDoc
+**Destination:** `Reference/FormalVerification/Isabelle/` (new subdirectory)
+
+---
+
+== TIER 7: JENKINS JOB DEFINITIONS (5 files)
+
+Location: StarForth-Governance/Reference/Infrastructure/Jenkins/
+
+=== Document: baseline-torture-test.groovy
+
+**Source:** `jenkins/jobs/baseline-torture-test.groovy`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Jenkins Job DSL for nightly baseline torture test
+**Signature Required:** NO - Job definition (code, not policy)
+**Target Format:** Groovy (no conversion)
+**Destination:** `Reference/Infrastructure/Jenkins/baseline-torture-test.groovy`
+
+---
+
+=== Document: pr-devl-pipeline.groovy
+
+**Source:** `jenkins/jobs/pr-devl-pipeline.groovy`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Description:** Jenkins Job DSL for PR devL pipeline
+**Signature Required:** NO - Job definition
+**Target Format:** Groovy
+**Destination:** `Reference/Infrastructure/Jenkins/pr-devl-pipeline.groovy`
+
+---
+
+=== Document: pr-test-pipeline.groovy
+
+**Source:** `jenkins/jobs/pr-test-pipeline.groovy`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Signature Required:** NO - Job definition
+**Target Format:** Groovy
+**Destination:** `Reference/Infrastructure/Jenkins/pr-test-pipeline.groovy`
+
+---
+
+=== Document: pr-qual-pipeline.groovy
+
+**Source:** `jenkins/jobs/pr-qual-pipeline.groovy`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Signature Required:** NO - Job definition
+**Target Format:** Groovy
+**Destination:** `Reference/Infrastructure/Jenkins/pr-qual-pipeline.groovy`
+
+---
+
+=== Document: pr-prod-release.groovy
+
+**Source:** `jenkins/jobs/pr-prod-release.groovy`
+**Duplicate Status:** ✅ NO DUPLICATION FOUND
+**Signature Required:** NO - Job definition
+**Target Format:** Groovy
+**Destination:** `Reference/Infrastructure/Jenkins/pr-prod-release.groovy`
+
+---
+
+== DOCUMENTS REQUIRING SIGNATURES
+
+Documents marked with "Signature Required: YES" require your esignature. Listed below for easy reference:
+
+[cols="1,2,1", options="header"]
+|===
+| Document | Type | Location
+| GOVERNANCE_REFERENCE_MANUAL | Policy | Reference/Foundation/
+| QUALITY_POLICY | Quality Policy | Reference/Foundation/
+| SECURITY_POLICY | Security Policy | Reference/Foundation/
+| TEST_STRATEGY | QA Policy | Reference/Foundation/
+| COMPREHENSIVE_DEFECTS_FOR_CAPA | Defect Inventory | Validation/SHARED/DEFECT_LOG/
+| IDENTIFIED_DEFECTS_FOR_CAPA | Historical Audit | Validation/SHARED/DEFECT_LOG/
+| 01-ECR_PROCESS | Process Definition | Reference/Processes/Chapters/
+| 02-ECO_PROCESS | Process Definition | Reference/Processes/Chapters/
+| 03-CAPA_PROCESS | Process Definition | Reference/Processes/Chapters/
+| 04-FMEA_PROCESS | QA Process | Reference/Processes/Chapters/
+| 09-THEORY_JUSTIFICATION_GUIDE | Formal Verification Policy | Reference/Processes/Chapters/
+| REFINEMENT_CAPA | Formal Verification Tracking | Reference/FormalVerification/
+|===
+
+**Total Signature Required:** 12 documents
+
+---
+
+== MIGRATION ACTIONS SUMMARY
+
+[cols="1,1,1,1", options="header"]
+|===
+| Action | Count | Documents | Status
+| Convert MD → AsciiDoc | 4 | BRANCH_PROTECTION_GUIDE, GITHUB_ACTIONS_SETUP, WORKFLOW, COMPREHENSIVE_DEFECTS | TODO
+| Merge with existing | 1 | CAPA_PROCESS.md → 03-CAPA_PROCESS.adoc | TODO
+| Keep as historical | 1 | IDENTIFIED_DEFECTS_FOR_CAPA | TODO
+| Copy as-is (AsciiDoc) | 23 | All governance chapters, policies, tech docs | TODO
+| Copy as-is (Groovy) | 5 | Jenkins Job DSL files | TODO
+| Keep in main repo | 2 | PR_WORKFLOW.md, other dev docs | N/A
+|===
+
+---
+
+== SIGNATURE BLOCKS TO ADD
+
+Documents requiring signatures should have a signature block at the end in this format:
+
+```
+== Approvals & Signature
+
+[cols="1,2,2", options="header"]
+|===
+| Role | Name | Date/Signature
+| Product Manager | Robert A. James | _____________
+| QA Lead | [Name] | _____________
+| Governance | [Name] | _____________
+|===
+```
+
+---
+
+== NEXT STEPS
+
+Awaiting user review and approval of manifest before proceeding with:
+
+1. ✅ Content duplication analysis (COMPLETE)
+2. ⏳ User review of categorization and signatures
+3. ⏳ Format conversions (MD → AsciiDoc)
+4. ⏳ Manual copying to StarForth-Governance repo
+5. ⏳ Adding signature blocks to 12 documents
+6. ⏳ Creating stubs/references in main repo
+7. ⏳ Deleting migrated files from main repo
+
+---
+
+**Manifest Status:** DRAFT - Ready for user approval
