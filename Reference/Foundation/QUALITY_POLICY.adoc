@@ -155,6 +155,37 @@ All quality objectives are measurable and verified through automated CI/CD pipel
 
 ---
 
+=== 6. Software Supply Chain (SBOM & Dependency Security)
+
+[cols="1,2,2"]
+|===
+|Objective |Target |Measurement
+
+|**Source Code SBOM** |100% of source code components tracked |syft ./src scan in test stage
+|**Artifact SBOM** |100% of linked libraries tracked per architecture |syft binary scan for each architecture (amd64, rpi4, riscv64)
+|**ISO Image SBOM** |100% of ISO image contents tracked |syft image scan before release
+|**Vulnerability Scanning** |Zero HIGH/CRITICAL CVEs in any SBOM |grype scan on all SBOMs before prod merge
+|**Multi-Architecture Coverage** |SBOMs generated for all target architectures |Separate SBOM per binary + image
+|**SBOM Archival** |All SBOMs retained per release version |Stored in Audit_Evidence/vX.Y.Z/
+|===
+
+**Verification Method:** syft for SBOM generation, grype for vulnerability scanning
+
+**Acceptance Criteria for Release:**
+- ✅ Code SBOM generated and vulnerability scanned (no HIGH/CRITICAL)
+- ✅ Artifact SBOMs generated for ALL target architectures (amd64, rpi4, etc.)
+- ✅ ISO image SBOMs generated for ALL target images
+- ✅ All vulnerability scans passed (grype --fail-on high)
+- ✅ SBOMs included in BUILD_MANIFEST with checksums
+- ✅ SBOMs archived in governance repo (Audit_Evidence/vX.Y.Z/)
+
+**Multi-Architecture Requirements:**
+- SBOM required for each target (amd64, rpi4, riscv64 when added, etc.)
+- Each SBOM scanned independently for vulnerabilities
+- Expansion pattern: Adding new architecture automatically includes SBOM in workflow
+
+---
+
 == Quality Acceptance Gates
 
 Every change must pass these gates before release:
