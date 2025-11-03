@@ -1,0 +1,2 @@
+This file ensures the in_basket directory is preserved in git.
+Remove only if you want the entire directory to disappear when empty.

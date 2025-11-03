@@ -2,342 +2,374 @@
 
 ## Overview
 
-Documents routed from StarForth arrive in in_basket and flow through this process:
+Documents routed from StarForth arrive in in_basket with metadata.json (created by route-to-vault.yml workflow).
+The disposition pipeline processes them in 4 steps:
 
 ```
-Incoming Document
+Incoming Document (from route-to-vault.yml)
+    ├─ Has metadata.json with document_type
+    └─ GitHub labels already applied (type:capa, type:cer, etc.)
     ↓
-Step 1: Add & Commit (keep in in_basket)
+Step 1: Document lands in in_basket (already committed by route-to-vault.yml)
     ↓
-Step 2: Identify type (Reference vs Controlled)
-    ├─ Reference? → Step 2A (sort to Reference, remove from in_basket)
-    └─ Controlled? → Step 3 (sort to proper location, create dir if needed)
+Step 2: Scan with Claude intelligence
+    ├─ Read metadata.json to get document_type
+    ├─ Convert document to AsciiDoc (if not already)
+    ├─ Add signature block template (if controlled document)
+    └─ Move to appropriate location (Reference or Controlled)
     ↓
-Step 3: Route Controlled Docs (create location if needed)
+Step 3: Route based on document type
+    ├─ Reference types → Reference/[Category]/[Type]/
+    ├─ Controlled types → in_basket/[Type]/ (or create location)
+    └─ Commit all moves
     ↓
-Step 4: Send E-Sign Notifications (if controlled doc)
+Step 4: Send notifications
+    ├─ Email notification (from GitHub account)
+    ├─ GitHub issue comment
+    ├─ Include action item (e.g., "Needs your signature")
+    └─ Log to SEC_LOG.adoc
     ↓
-Complete (committed to git, stakeholders notified)
+Step 5: Track signatures against Security/Signatures.adoc
+    ├─ When you sign doc, add entry to Signatures.adoc
+    ├─ Pipeline verifies signature in place
+    └─ If verified, move to Reference vault (immutable archive)
 ```
 
 ---
 
 ## Step 1: Incoming File Lands in in_basket
 
-**Action:** Add document and metadata to in_basket, commit
-
-**What happens:**
-- Document file arrives from StarForth (route-to-vault.yml)
-- metadata.json created with:
-  - document_type
-  - github_issue
+**What happens (already done by route-to-vault.yml workflow):**
+- Document file arrives from StarForth
+- metadata.json created in in_basket/ with:
+  - document_type (detected from GitHub labels)
+  - github_issue (issue number)
   - github_title
-  - created_at, routed_at timestamps
+  - created_at, routed_at (timestamps)
   - status: in-basket-pending-processing
 
-**Jenkins action:**
-```bash
-git add in_basket/[DOCUMENT]/
-git commit -m "in-basket: Incoming document [TYPE]-[ID] from StarForth
+**Already committed by route-to-vault.yml**
 
-Document type: [TYPE]
-GitHub issue: #[ISSUE]
-Title: [TITLE]
-Status: Landed in in_basket, pending disposition"
-```
-
-**Result:** Document is preserved in git history, in_basket keeps all incoming documents
+**Result:** Document is in git history, in_basket has all incoming documents
 
 ---
 
-## Step 2: Sort Obvious Reference Documents
+## Step 2: Scan with Claude Intelligence & Convert Format
 
-**Action:** Identify and move clearly-reference-only documents
+**Action:** Process document through pipeline
 
-**What qualifies as "Reference":**
-- Architecture/design specs (ARCHITECTURE.adoc, ABI.adoc, etc.)
-- Training materials (FOUNDATION-OVERVIEW.md, etc.)
-- Verification reports (VERIFICATION_REPORT.adoc)
-- Implementation guides (if not governance-specific)
-- Formal proofs and mathematical specifications
-- Technical guides (BLOCK_STORAGE_GUIDE.adoc, WORD_DEVELOPMENT.adoc)
+**What happens:**
+1. Read metadata.json to get document_type
+2. Determine if Reference or Controlled document:
+   - Reference types: DHR, DMR, ART, MIN, REL, RMP (auto-vault)
+   - Controlled types: CAPA, CER, ECR, ECO, FMEA, DWG, ENG, SEC, IR, VAL, DTA
+3. If not AsciiDoc, convert to AsciiDoc
+4. If Controlled, add signature block template at end
+5. Move to appropriate location
 
-**What stays in in_basket (NOT Reference):**
-- Security event logs (SEC_LOG.adoc)
-- Intake procedures
-- Session handoff notes
-- Gap analysis
-- Break/test reports
-- Governance declarations and manifests
-- Audit manifests (controlled document)
+**Signature Block Template (for Controlled Documents):**
+```asciidoc
+== Signatures
+
+|===
+| Signatory | Role | Date | Signature Status
+
+| rajames440 | Owner | | Pending
+|===
+```
 
 **Jenkins action:**
 ```bash
-# For each obvious Reference document:
-mv in_basket/DOCUMENT.adoc Reference/Foundation/
-git add Reference/Foundation/DOCUMENT.adoc
-git rm in_basket/DOCUMENT.adoc  # or git add -u
+# Read document type from metadata
+DOCTYPE=$(jq -r '.document_type' in_basket/metadata.json)
 
-git commit -m "vault: Move Reference document to permanent vault
+# Convert to AsciiDoc if needed (Claude handles this)
+if [[ ! "$FILE" == *.adoc ]]; then
+    # Convert markdown/docx/pdf to AsciiDoc
+    claude_convert_to_asciidoc "$FILE" > "${FILE%.ext}.adoc"
+fi
 
-Document: DOCUMENT.adoc
-Category: Reference/Foundation
-Status: Sorted from in_basket to vault
-Reason: Obvious reference material, not controlled"
+# Add signature block if controlled
+if [[ "$DOCTYPE" != @(DHR|DMR|ART|MIN|REL|RMP) ]]; then
+    append_signature_block_template "$FILE"
+fi
 ```
 
-**Result:** Document removed from in_basket, in Reference/Foundation, git shows move operation
+**Result:** Document in AsciiDoc format, signature block added if needed
 
 ---
 
-## Step 3: Route Controlled Documents to Proper Location
+## Step 3: Route Based on Document Type
 
-**Action:** Move governance-controlled documents to their domain
+**Action:** Move document to appropriate location based on its type
 
-**What qualifies as "Controlled":**
-- CAPA (Corrective Action) → in_basket/CAPAs/ OR Reference/Quality/CAPAs/
-- ECR/ECO (Engineering Change) → in_basket/Changes/ OR Reference/Processes/Changes/
-- DHR (Design History Report) → Reference/Quality/DHR/
-- FMEA (Failure Mode) → Reference/Quality/FMEA/
-- Security Events/IR → in_basket/SecurityEvents/ OR Reference/Security/
-- Audit Reports → in_basket/AuditReports/ OR Reference/Processes/Audit/
+**Document Type → Location Mapping:**
 
-**If location doesn't exist, create it with intelligent naming:**
-- Use document_type from metadata
-- Follow convention: `in_basket/[PLURAL_TYPE]/` or `Reference/[Category]/[PLURAL_TYPE]/`
-- Examples:
-  - CAPA → `in_basket/CAPAs/` or `Reference/Quality/CAPAs/`
-  - ECR → `in_basket/Changes/` or `Reference/Processes/Changes/`
-  - SecurityEvent → `in_basket/SecurityEvents/` or `Reference/Security/SecurityEvents/`
+| Type | Category | Location | Purpose |
+|------|----------|----------|---------|
+| DHR, DMR, ART, MIN, REL, RMP | Reference | Reference/Quality/[TYPE]/ | Auto-vault (read-only archive) |
+| CAPA | Process | in_basket/CAPAs/ | Awaiting your signature |
+| CER, CER-Protocol, CER-Results | Process | in_basket/CERs/ | Awaiting your signature |
+| ECR, ECO | Process | in_basket/Changes/ | Awaiting your signature |
+| FMEA | Quality | in_basket/FMEAs/ | Awaiting your signature |
+| DWG, ENG | Design | in_basket/Design/ | Awaiting your signature |
+| SEC, IR | Security | in_basket/Security/ | Awaiting your signature |
+| VAL, DTA | Verification | in_basket/Verification/ | Awaiting your signature |
 
 **Jenkins action:**
 ```bash
-# Determine document type and proper location
-DOCTYPE=$(jq .document_type metadata.json)
-LOCATION=$(map_document_type_to_location $DOCTYPE)
+# Read document type and GitHub issue
+DOCTYPE=$(jq -r '.document_type' metadata.json)
+ISSUE=$(jq -r '.github_issue' metadata.json)
+
+# Determine target location (create if needed)
+case "$DOCTYPE" in
+    DHR|DMR|ART|MIN|REL|RMP)
+        TARGET="Reference/Quality/${DOCTYPE}s/"  # Auto-vault
+        ;;
+    CAPA)
+        TARGET="in_basket/CAPAs/"
+        ;;
+    CER*)
+        TARGET="in_basket/CERs/"
+        ;;
+    ECR|ECO)
+        TARGET="in_basket/Changes/"
+        ;;
+    FMEA)
+        TARGET="in_basket/FMEAs/"
+        ;;
+    DWG|ENG)
+        TARGET="in_basket/Design/"
+        ;;
+    SEC|IR)
+        TARGET="in_basket/Security/"
+        ;;
+    VAL|DTA)
+        TARGET="in_basket/Verification/"
+        ;;
+    *)
+        TARGET="in_basket/Uncategorized/"
+        ;;
+esac
 
 # Create location if needed
-mkdir -p $LOCATION
+mkdir -p "$TARGET"
 
-# If location in in_basket, keep document there for processing
-if [[ $LOCATION == in_basket/* ]]; then
-    mkdir -p "$LOCATION"
-    mv in_basket/[DOCUMENT] "$LOCATION/"
-    git add "$LOCATION/"
-    git rm -r in_basket/[DOCUMENT]/
+# Move document
+mv in_basket/${DOCTYPE}-${ISSUE}/ "$TARGET/"
 
-    git commit -m "in-basket: Route controlled document to domain location
+# Commit the move
+git add "$TARGET/"
+git rm -r in_basket/${DOCTYPE}-${ISSUE}/ 2>/dev/null || true
 
-Document: [TYPE]-[ID]
-Location: $LOCATION
-Status: Awaiting review/signature
-Reason: Controlled governance artifact"
+git commit -m "disposition: Route ${DOCTYPE}-${ISSUE} to ${TARGET}
 
-# If location in Reference, move there and mark as archived
-else
-    # Create compliance certificate
-    # Create immutability manifest
-    git add Reference/
-    git rm -r in_basket/[DOCUMENT]/
-
-    git commit -m "vault: Archive controlled document to Reference vault
-
-Document: [TYPE]-[ID]
-Location: $LOCATION
-Status: Immutable archive
-Reason: Controlled document, moved to permanent vault"
-fi
+Document: ${DOCTYPE} #${ISSUE}
+Type: $(if [[ "$TARGET" == Reference* ]]; then echo "Reference (auto-vault)"; else echo "Controlled (awaiting action)"; fi)
+Status: Ready for processing"
 ```
 
-**Result:** Document in proper location (in_basket for processing, Reference for archive), tracked in git
+**Result:** Document in proper location, tracked in git
 
 ---
 
-## Step 4: Send E-Sign Notifications
+## Step 4: Send Notifications to You
 
-**Action:** For controlled documents, notify signatories
-
-**What needs signing:**
-- All controlled documents (CAPA, ECR, ECO, FMEA, DHR, etc.)
-- Use metadata from document or configuration
+**Action:** For controlled documents, send email + GitHub comment with action items
 
 **Process:**
-1. Read document_type from metadata.json
-2. Look up signatories from config (SIGNATORIES.json)
-3. For each signatory:
-   - Get PGP public key
-   - Get PGP fingerprint
-   - Compose notification email
-   - Send with:
-     - Document link (GitHub or vault location)
-     - PGP public key (for signing software)
-     - Fingerprint (for verification)
-     - Signing deadline
-     - Instructions
+1. Determine if Reference (auto-vault) or Controlled (needs signature)
+2. If Reference: Log to SEC_LOG, done
+3. If Controlled: Send notification with action item
 
-**Email template:**
+**Email Notification (from GitHub account):**
 ```
-Subject: E-Signature Required: [DOCUMENT_TYPE]-[ID] - [TITLE]
+Subject: Action Required: [DOCTYPE]-[ISSUE] - [TITLE]
 
-Please review and e-sign the attached document.
+A governance document is ready for your review and signature.
 
 Document Details:
-  Type: [DOCUMENT_TYPE]
-  ID: [ID]
+  Type: [DOCTYPE]
+  GitHub Issue: #[ISSUE]
   Title: [TITLE]
-  Location: [GITHUB_ISSUE or VAULT_PATH]
-  Deadline: [DATE]
+  Location: StarForth-Governance/in_basket/[LOCATION]/
 
-PGP Signing Information:
-  Your Public Key: [KEY_ID/FINGERPRINT]
-  Fingerprint: [FULL_FINGERPRINT]
+Action Required:
+  1. Review document at: [GITHUB_ISSUE_LINK]
+  2. Sign: PGP key fingerprint [YOUR_FINGERPRINT]
+  3. Add entry to: Security/Signatures.adoc
 
-To Sign:
-  1. Download the document
-  2. Create signature using: gpg --detach-sign --armor [FILE]
-  3. Submit signature via [PROCESS]
+Signature Format:
+  | [DOCTYPE]-[ISSUE] | YYYY-MM-DD | [Signature] |
 
-Questions? Contact [PM_EMAIL]
+Questions? Check the GitHub issue for details.
+```
+
+**GitHub Comment (on original issue):**
+```
+✅ Document Routed for Processing
+
+Your **[DOCTYPE]** document has been routed to the governance vault.
+
+**Location:** StarForth-Governance/in_basket/[LOCATION]/
+
+**Next Step:** Review and sign when ready. Update `Security/Signatures.adoc` with signature.
+
+Status: Awaiting your signature for archival.
 ```
 
 **Jenkins action:**
 ```bash
-# Read document type
-DOCTYPE=$(jq .document_type metadata.json)
+# Determine if Reference or Controlled
+DOCTYPE=$(jq -r '.document_type' metadata.json)
+ISSUE=$(jq -r '.github_issue' metadata.json)
+TITLE=$(jq -r '.github_title' metadata.json)
 
-# Look up signatories
-SIGNATORIES=$(jq ".documents[\"$DOCTYPE\"].signatories" SIGNATORIES.json)
+if [[ "$DOCTYPE" == @(DHR|DMR|ART|MIN|REL|RMP) ]]; then
+    # Reference type - auto-vault, just log
+    echo "| $(date -u +%Y-%m-%dT%H:%M:%SZ) | Auto-Vault | disposition | ${DOCTYPE}-${ISSUE} | Reference doc archived | LOW |" >> SEC_LOG.adoc
+else
+    # Controlled type - send notification
 
-# For each signatory
-for signatory in $(echo $SIGNATORIES | jq -r '.[]'); do
-    PGP_KEY=$(jq ".signatories[\"$signatory\"].pgp_key" SIGNATORIES.json)
-    PGP_FINGERPRINT=$(jq ".signatories[\"$signatory\"].pgp_fingerprint" SIGNATORIES.json)
-    EMAIL=$(jq ".signatories[\"$signatory\"].email" SIGNATORIES.json)
+    # Send email (from GitHub account)
+    send_email \
+        --subject "Action Required: ${DOCTYPE}-${ISSUE} - ${TITLE}" \
+        --to "your.github.email@example.com" \
+        --body "$(cat <<EOF
+A governance document is ready for your review and signature.
 
-    # Send notification email with PGP key & fingerprint
-    send_notification_email \
-        --to "$EMAIL" \
-        --document-id "[TYPE]-[ID]" \
-        --document-title "[TITLE]" \
-        --pgp-key "$PGP_KEY" \
-        --pgp-fingerprint "$PGP_FINGERPRINT" \
-        --location "$LOCATION"
+Document: ${DOCTYPE}-${ISSUE}
+Title: ${TITLE}
+Location: StarForth-Governance/in_basket/[LOCATION]/
+
+Action: Review and sign, then add to Security/Signatures.adoc
+EOF
+)"
+
+    # Post GitHub comment on original issue
+    gh issue comment ${ISSUE} --body "$(cat <<EOF
+✅ Document Routed for Processing
+
+Your **${DOCTYPE}** document has been routed to the governance vault.
+
+**Location:** StarForth-Governance/in_basket/[LOCATION]/
+
+**Next Step:** Review and sign when ready. Update \`Security/Signatures.adoc\` with signature.
+
+Status: Awaiting your signature for archival.
+EOF
+)"
 
     # Log to SEC_LOG
-    echo "| $(date -u +%Y-%m-%dT%H:%M:%SZ) | E-Sign Notification | in-basket-watcher | [TYPE]-[ID] | Sent to $signatory | LOW |" >> SEC_LOG.adoc
+    echo "| $(date -u +%Y-%m-%dT%H:%M:%SZ) | Signature Notification | disposition | ${DOCTYPE}-${ISSUE} | Awaiting signature from rajames440 | LOW |" >> SEC_LOG.adoc
 fi
 ```
 
-**Result:** Signatories notified with document details and PGP information, logged in SEC_LOG
+**Result:** You notified (email + GitHub comment), awaiting your action, logged in SEC_LOG
+
+---
+
+## Step 5: Track Signatures in Security/Signatures.adoc
+
+**Action:** After you sign a document, update Security/Signatures.adoc
+
+**What happens:**
+1. You review controlled document in in_basket/[TYPE]/
+2. You sign it (PGP signature)
+3. You add entry to Security/Signatures.adoc
+4. Jenkins verifies signature is in place
+5. If verified, Jenkins moves document to Reference vault (immutable archive)
+
+**Signatures.adoc format:**
+```asciidoc
+== Document Signatures
+
+Immutable record of all signed governance documents.
+
+|===
+| Document | Signer | Date | Signature Status | Reference Location
+
+| CAPA-0042 | rajames440 | 2025-11-05 | ✓ SIGNED | Reference/Quality/CAPAs/CAPA-0042/
+| ECR-0015 | rajames440 | 2025-11-06 | ✓ SIGNED | Reference/Processes/Changes/ECR-0015/
+| FMEA-0008 | rajames440 | 2025-11-07 | ✓ SIGNED | Reference/Quality/FMEAs/FMEA-0008/
+|===
+```
+
+**Jenkins action (signature verification):**
+```bash
+# After you update Signatures.adoc, Jenkins runs:
+
+# Check if document signature is listed
+SIGNED=$(grep -c "${DOCTYPE}-${ISSUE}" Security/Signatures.adoc || echo 0)
+
+if [[ $SIGNED -gt 0 ]]; then
+    # Signature found - move to immutable archive
+    mkdir -p "Reference/[Category]/${DOCTYPE}s/${DOCTYPE}-${ISSUE}/"
+    mv "in_basket/${LOCATION}/${DOCTYPE}-${ISSUE}/"* "Reference/[Category]/${DOCTYPE}s/${DOCTYPE}-${ISSUE}/"
+
+    # Add immutable marker
+    echo "IMMUTABLE - signed and archived on $(date)" > "Reference/[Category]/${DOCTYPE}s/${DOCTYPE}-${ISSUE}/.immutable"
+
+    # Commit
+    git add Reference/
+    git rm -r "in_basket/${LOCATION}/${DOCTYPE}-${ISSUE}/"
+
+    git commit -m "vault: Archive signed ${DOCTYPE}-${ISSUE} to immutable Reference vault
+
+Document: ${DOCTYPE}-${ISSUE}
+Signed by: rajames440
+Date: $(date)
+Location: Reference/[Category]/${DOCTYPE}s/${DOCTYPE}-${ISSUE}/
+Status: Immutable archive"
+
+    # Post GitHub comment
+    gh issue comment ${ISSUE} --body "✅ Signed and Archived
+
+Your **${DOCTYPE}-${ISSUE}** has been signed and archived to the Reference vault.
+
+**Location:** Reference/[Category]/${DOCTYPE}s/${DOCTYPE}-${ISSUE}/
+**Status:** IMMUTABLE - read-only archive
+**Timestamp:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+This document is now part of the official governance record."
+
+    # Log to SEC_LOG
+    echo "| $(date -u +%Y-%m-%dT%H:%M:%SZ) | Signature Verified | disposition | ${DOCTYPE}-${ISSUE} | Moved to immutable vault | LOW |" >> SEC_LOG.adoc
+else
+    # Signature not found yet - document remains in in_basket
+    echo "⧑ ${DOCTYPE}-${ISSUE} signature not yet found in Security/Signatures.adoc - awaiting your signature"
+fi
+```
+
+**Result:** Signed documents moved to immutable Reference vault, logged in SEC_LOG, GitHub notified
 
 ---
 
 ## Summary: What Gets Committed
 
-### Step 1 Commit
-```
-in-basket: Incoming document [TYPE]-[ID] from StarForth
-```
-- Adds document to in_basket
-- Preserves in git
+**Step 1:** `in-basket: Incoming document [TYPE]-[ID] from StarForth` (done by route-to-vault.yml)
 
-### Step 2 Commit
-```
-vault: Move Reference document to permanent vault
-```
-- Shows document moving from in_basket → Reference
-- Git tracks it as a move/rename
-
-### Step 3 Commit
-```
-in-basket: Route controlled document to domain location
-OR
-vault: Archive controlled document to Reference vault
-```
-- Shows document moving from in_basket → proper location
+**Step 2-3:** `disposition: Route [TYPE]-[ID] to [LOCATION]`
+- Document moved from in_basket → proper location
 - Git tracks the move
 
-### Step 4 (No commit)
-- Notification sent, logged in SEC_LOG
-- Signatories have PGP information to complete signing process
+**Step 4:** (no commit, just notification sent and logged)
+
+**Step 5:** `vault: Archive signed [TYPE]-[ID] to immutable Reference vault`
+- Document moved from in_basket/[TYPE]/ → Reference/[Category]/[TYPE]s/
+- Marked immutable
+- Removed from in_basket
 
 ---
 
-## Configuration Files Needed
+## Key Points
 
-### SIGNATORIES.json
-Maps document types to required signers and their PGP info:
-
-```json
-{
-  "documents": {
-    "CAPA": {
-      "signatories": ["PM", "QA_Lead", "Engineering_Manager"],
-      "deadline_days": 5
-    },
-    "ECR": {
-      "signatories": ["PM", "Engineering_Manager"],
-      "deadline_days": 3
-    },
-    "FMEA": {
-      "signatories": ["PM", "QA_Lead"],
-      "deadline_days": 7
-    }
-  },
-  "signatories": {
-    "PM": {
-      "email": "pm@starforth.local",
-      "pgp_key": "0x12345678",
-      "pgp_fingerprint": "1234 5678 9ABC DEF0 1234 5678 9ABC DEF0 1234 5678"
-    },
-    "QA_Lead": {
-      "email": "qa-lead@starforth.local",
-      "pgp_key": "0x87654321",
-      "pgp_fingerprint": "8765 4321 CDEF 89AB 8765 4321 CDEF 89AB 8765 4321"
-    },
-    "Engineering_Manager": {
-      "email": "eng-manager@starforth.local",
-      "pgp_key": "0xABCDEF00",
-      "pgp_fingerprint": "ABCD EF00 1234 5678 ABCD EF00 1234 5678 ABCD EF00"
-    }
-  }
-}
-```
-
-### VAULT_LOCATIONS.json
-Maps document types to vault locations:
-
-```json
-{
-  "document_types": {
-    "CAPA": {
-      "location": "in_basket/CAPAs/",
-      "archive_location": "Reference/Quality/CAPAs/",
-      "requires_signature": true,
-      "category": "Quality"
-    },
-    "ECR": {
-      "location": "in_basket/Changes/",
-      "archive_location": "Reference/Processes/Changes/",
-      "requires_signature": true,
-      "category": "Process"
-    },
-    "ARCHITECTURE": {
-      "location": "Reference/Foundation/",
-      "archive_location": null,
-      "requires_signature": false,
-      "category": "Reference"
-    }
-  }
-}
-```
-
----
-
-## Status
-
-These are the **defined steps**. Ready to:
-1. Create SIGNATORIES.json with actual stakeholders?
-2. Create VAULT_LOCATIONS.json with proper mappings?
-3. Build Jenkins pipeline that implements these steps?
-4. Test with sample documents?
+✅ **Documents automatically classified** by StarForth workflows (type:* labels)
+✅ **Reference documents auto-vault** (no action needed)
+✅ **Controlled documents** wait for your signature in in_basket/[TYPE]/
+✅ **Your signature tracked** in Security/Signatures.adoc
+✅ **All actions logged** to SEC_LOG.adoc
+✅ **GitHub notifications** keep issue updated
+✅ **in_basket preserved** with DO_NOT_REMOVE_ME file
+✅ **Read-only repo** (only you can write)
