@@ -1,0 +1,240 @@
+// Jenkinsfile.disposition
+// Document Disposition Pipeline - Main Orchestrator
+// Manages the complete lifecycle of documents from in_basket to signed vault
+
+pipeline {
+    agent any
+
+    parameters {
+        booleanParam(
+            name: 'DRY_RUN',
+            defaultValue: false,
+            description: 'Dry run mode (no commits/pushes)'
+        )
+        string(
+            name: 'PROCESS_DOCUMENT',
+            defaultValue: '',
+            description: 'Process specific document (filename). Leave empty for all.'
+        )
+    }
+
+    triggers {
+        // Poll for changes to in_basket every 15 minutes
+        pollSCM('H/15 * * * *')
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '50'))
+        timeout(time: 2, unit: 'HOURS')
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
+    environment {
+        GOVERNANCE_REPO = 'rajames440/StarForth-Governance'
+        WORKSPACE_REPO = "${WORKSPACE}/governance"
+        IN_BASKET = "${WORKSPACE_REPO}/in_basket"
+        PENDING = "${WORKSPACE_REPO}/Pending"
+        SEC_LOG = "${WORKSPACE_REPO}/Security/SEC_LOG.adoc"
+        SIGNATURES_FILE = "${WORKSPACE_REPO}/Security/Signatures.adoc"
+        GIT_AUTHOR_NAME = "Disposition Pipeline"
+        GIT_AUTHOR_EMAIL = "disposition@starforth.governance"
+        TIMESTAMP = sh(script: 'date -u +%Y-%m-%dT%H:%M:%SZ', returnStdout: true).trim()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "📋 Checking out StarForth-Governance repository..."
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: '*/master']],
+                        userRemoteConfigs: [[
+                            url: "https://github.com/${GOVERNANCE_REPO}.git",
+                            credentialsId: 'github-credentials'
+                        ]]
+                    ])
+                }
+            }
+        }
+
+        stage('Scan In_Basket') {
+            steps {
+                script {
+                    echo "🔍 Scanning in_basket for new documents..."
+
+                    sh '''
+                        cd "${IN_BASKET}"
+
+                        # Find all documents (not DO_NOT_REMOVE_ME)
+                        DOC_COUNT=$(find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | wc -l)
+                        echo "Found ${DOC_COUNT} document(s) in in_basket"
+
+                        if [ ${DOC_COUNT} -gt 0 ]; then
+                            echo ""
+                            echo "Documents ready for processing:"
+                            find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort | while read doc; do
+                                echo "  - $(basename "$doc")"
+                            done
+                        fi
+
+                        echo "${DOC_COUNT}" > /tmp/doc_count
+                    '''
+
+                    env.DOC_COUNT = readFile('/tmp/doc_count').trim()
+                }
+            }
+        }
+
+        stage('Process Documents') {
+            when {
+                expression { env.DOC_COUNT != "0" }
+            }
+            steps {
+                script {
+                    echo "📦 Processing ${DOC_COUNT} document(s)..."
+
+                    sh '''
+                        cd "${IN_BASKET}"
+
+                        # Process each document
+                        find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort | while read doc; do
+                            doc_name=$(basename "$doc")
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "Processing: ${doc_name}"
+
+                            # For now, just log that we found the document
+                            # Full processing logic to be implemented in next stage
+                            echo "  Status: Queued for disposition"
+                        done
+                    '''
+                }
+            }
+        }
+
+        stage('Classify Documents') {
+            when {
+                expression { env.DOC_COUNT != "0" }
+            }
+            steps {
+                script {
+                    echo "🔬 Classifying documents by type..."
+
+                    sh '''
+                        cd "${IN_BASKET}"
+
+                        # Read each document and classify
+                        find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort | while read doc; do
+                            doc_name=$(basename "$doc")
+                            echo "  Classifying: ${doc_name}"
+
+                            # For now, basic classification based on filename
+                            # Full Claude classification to be implemented
+                            if [[ "$doc_name" == *"CAPA"* ]]; then
+                                echo "    Type: CAPA"
+                            elif [[ "$doc_name" == *"ECR"* ]]; then
+                                echo "    Type: ECR"
+                            elif [[ "$doc_name" == *"FMEA"* ]]; then
+                                echo "    Type: FMEA"
+                            else
+                                echo "    Type: UNKNOWN (requires Claude classification)"
+                            fi
+                        done
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Git Status') {
+            steps {
+                script {
+                    echo "✓ Verifying git status..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        # Check git config
+                        echo "Git configuration:"
+                        git config user.name || echo "  user.name not set"
+                        git config user.email || echo "  user.email not set"
+
+                        # Show current branch
+                        echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+
+                        # Show status
+                        echo "Status:"
+                        git status --short | head -20
+                    '''
+                }
+            }
+        }
+
+        stage('Create Feature Branch') {
+            when {
+                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🌿 Creating feature branch for document processing..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        # For initial implementation, create a single branch
+                        # In full implementation, create one per document
+                        BRANCH_NAME="doc/disposition-$(date +%s)"
+
+                        git checkout -b "${BRANCH_NAME}"
+                        echo "Created branch: ${BRANCH_NAME}"
+                        echo "${BRANCH_NAME}" > /tmp/branch_name
+                    '''
+
+                    env.BRANCH_NAME = readFile('/tmp/branch_name').trim()
+                }
+            }
+        }
+
+        stage('Summary') {
+            steps {
+                script {
+                    echo "📊 Disposition Pipeline Summary"
+                    echo "=================================="
+                    echo "Execution: ${TIMESTAMP}"
+                    echo "Documents found: ${DOC_COUNT}"
+                    if (env.BRANCH_NAME) {
+                        echo "Branch: ${BRANCH_NAME}"
+                    }
+                    if (params.DRY_RUN) {
+                        echo "Mode: DRY RUN (no commits)"
+                    } else {
+                        echo "Mode: LIVE (will commit changes)"
+                    }
+                    echo "Status: READY FOR NEXT STAGES"
+                    echo "=================================="
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo "✅ Pipeline execution complete"
+                echo "Build Status: ${currentBuild.result}"
+            }
+        }
+
+        success {
+            script {
+                echo "✓ Documents processed successfully"
+            }
+        }
+
+        failure {
+            script {
+                echo "❌ Pipeline encountered errors"
+            }
+        }
+    }
+}
