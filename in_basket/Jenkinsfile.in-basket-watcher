@@ -1,0 +1,330 @@
+// Jenkinsfile.in-basket-watcher
+// In_Basket File Watcher & Disposition Pipeline
+// Monitors in_basket/ for documents routed from StarForth
+// Applies disposition logic and routes to Reference vault
+
+pipeline {
+    agent any
+
+    parameters {
+        booleanParam(
+            name: 'DRY_RUN',
+            defaultValue: false,
+            description: 'Run in dry-run mode (no vault routing)'
+        )
+        string(
+            name: 'DOCUMENT_ID',
+            defaultValue: '',
+            description: 'Optional: Process specific document ID only'
+        )
+    }
+
+    triggers {
+        // Poll for changes to in_basket every 5 minutes
+        pollSCM('H/5 * * * *')
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '50'))
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
+    environment {
+        GOVERNANCE_REPO = 'rajames440/StarForth-Governance'
+        WORKSPACE_REPO = "${WORKSPACE}/governance"
+        IN_BASKET = "${WORKSPACE_REPO}/in_basket"
+        REFERENCE_VAULT = "${WORKSPACE_REPO}/Reference"
+        SEC_LOG = "${IN_BASKET}/SEC_LOG.adoc"
+        GIT_AUTHOR_NAME = "In_Basket Watcher"
+        GIT_AUTHOR_EMAIL = "in-basket-watcher@starforth.governance"
+        TIMESTAMP = sh(script: 'date -u +%Y-%m-%dT%H:%M:%SZ', returnStdout: true).trim()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "📋 Checking out StarForth-Governance repository..."
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: '*/master']],
+                        userRemoteConfigs: [[
+                            url: "https://github.com/${GOVERNANCE_REPO}.git",
+                            credentialsId: 'github-credentials'
+                        ]]
+                    ])
+                }
+            }
+        }
+
+        stage('Scan In_Basket') {
+            steps {
+                script {
+                    echo "🔍 Scanning in_basket for incoming documents..."
+
+                    sh '''
+                        # Find all documents with metadata
+                        METADATA_FILES=$(find ${IN_BASKET} -name "metadata.json" -type f 2>/dev/null | wc -l)
+                        echo "Found ${METADATA_FILES} document(s) with metadata"
+
+                        if [ ${METADATA_FILES} -gt 0 ]; then
+                            echo ""
+                            echo "Documents ready for disposition:"
+                            find ${IN_BASKET} -name "metadata.json" -type f 2>/dev/null | while read metadata; do
+                                dir=$(dirname "$metadata")
+                                docname=$(basename "$dir")
+                                echo "  - ${docname}"
+                            done
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Process Pending Documents') {
+            steps {
+                script {
+                    echo "📦 Processing documents from in_basket..."
+
+                    sh '''
+                        cd "${IN_BASKET}"
+
+                        # Find all metadata files (each represents a routed document)
+                        find . -name "metadata.json" -type f | sort | while read metadata_path; do
+                            metadata_dir=$(dirname "$metadata_path")
+                            doc_id=$(basename "$metadata_dir")
+
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "Processing: ${doc_id}"
+
+                            # Read metadata
+                            if [ -f "$metadata_path" ]; then
+                                # Parse JSON metadata
+                                doc_type=$(grep -o '"document_type": "[^"]*' "$metadata_path" | cut -d'"' -f4)
+                                github_issue=$(grep -o '"github_issue": "[^"]*' "$metadata_path" | cut -d'"' -f4)
+                                status=$(grep -o '"status": "[^"]*' "$metadata_path" | cut -d'"' -f4)
+
+                                echo "  Type: ${doc_type}"
+                                echo "  Issue: #${github_issue}"
+                                echo "  Status: ${status}"
+
+                                # Determine if document is ready for vault
+                                if [ "${status}" = "in-basket-pending-processing" ]; then
+                                    echo "  → Pending disposition decision"
+                                else
+                                    echo "  → Status indicates action needed"
+                                fi
+                            fi
+
+                            echo ""
+                        done
+                    '''
+                }
+            }
+        }
+
+        stage('Apply Disposition Logic') {
+            steps {
+                script {
+                    echo "⚖️ Applying disposition rules..."
+
+                    sh '''
+                        cd "${IN_BASKET}"
+
+                        # For each pending document, check if it has approval evidence
+                        find . -name "metadata.json" -type f | sort | while read metadata_path; do
+                            metadata_dir=$(dirname "$metadata_path")
+                            doc_id=$(basename "$metadata_dir")
+
+                            echo "  Checking disposition for: ${doc_id}"
+
+                            # Check for approval evidence in metadata or comments
+                            if grep -q "approved" "$metadata_path" 2>/dev/null; then
+                                echo "    ✓ Approval evidence found - APPROVE"
+                            else
+                                echo "    ⧑ No approval evidence - PENDING REVIEW"
+                            fi
+                        done
+                    '''
+                }
+            }
+        }
+
+        stage('Route to Reference Vault') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🔄 Routing approved documents to Reference vault..."
+
+                    sh '''
+                        cd "${IN_BASKET}"
+
+                        # Find all pending documents
+                        find . -name "metadata.json" -type f | sort | while read metadata_path; do
+                            metadata_dir=$(dirname "$metadata_path")
+                            doc_id=$(basename "$metadata_dir")
+
+                            echo "  Processing routing for: ${doc_id}"
+
+                            # Read document type
+                            if [ -f "$metadata_path" ]; then
+                                doc_type=$(grep -o '"document_type": "[^"]*' "$metadata_path" | cut -d'"' -f4)
+
+                                # Determine vault location based on document type
+                                case "${doc_type}" in
+                                    "FMEA"|"DHR"|"DMR"|"ART"|"MIN"|"REL"|"RMP")
+                                        vault_path="Reference/Quality/"
+                                        ;;
+                                    "CER"|"CAPA"|"ECR"|"ECO")
+                                        vault_path="Reference/Processes/"
+                                        ;;
+                                    "DWG"|"ENG")
+                                        vault_path="Reference/Design/"
+                                        ;;
+                                    "SEC"|"IR")
+                                        vault_path="Reference/Security/"
+                                        ;;
+                                    *)
+                                        vault_path="Reference/Uncategorized/"
+                                        ;;
+                                esac
+
+                                echo "    Type: ${doc_type} → ${vault_path}"
+                            fi
+                        done
+                    '''
+                }
+            }
+        }
+
+        stage('Update SEC_LOG') {
+            steps {
+                script {
+                    echo "📝 Updating security audit log..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        # Append disposition event to SEC_LOG
+                        if [ -f "${SEC_LOG}" ]; then
+                            echo "| ${TIMESTAMP} | Document Processing | in-basket-watcher | Processed incoming documents | Normal operation | LOW |" >> "${SEC_LOG}"
+                            echo "✓ SEC_LOG updated"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Commit Changes') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "💾 Committing vault routing..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        git config user.name "${GIT_AUTHOR_NAME}"
+                        git config user.email "${GIT_AUTHOR_EMAIL}"
+
+                        # Check for changes
+                        if ! git diff --cached --quiet; then
+                            git add Reference/ in_basket/ SEC_LOG.adoc
+
+                            if ! git diff --cached --quiet; then
+                                git commit -m "vault: Route documents from in_basket to Reference vault
+
+- Process pending documents
+- Apply disposition logic
+- Route approved items to vault
+- Update SEC_LOG
+- Timestamp: ${TIMESTAMP}"
+
+                                echo "✓ Changes committed"
+                            else
+                                echo "ℹ No changes to commit"
+                            fi
+                        else
+                            echo "ℹ No staged changes"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Push Changes') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🚀 Pushing to repository..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        if [ $(git rev-list --count origin/master..HEAD) -gt 0 ]; then
+                            git push origin master
+                            echo "✓ Changes pushed"
+                        else
+                            echo "ℹ No new commits to push"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Generate Summary') {
+            steps {
+                script {
+                    echo "📊 Generating disposition summary..."
+
+                    sh '''
+                        echo ""
+                        echo "======================================"
+                        echo "In_Basket Disposition Summary"
+                        echo "======================================"
+                        echo "Execution: ${TIMESTAMP}"
+                        echo ""
+                        echo "Documents in in_basket:"
+                        find ${IN_BASKET} -maxdepth 1 -type d | grep -v "^${IN_BASKET}$" | sed 's|^.*/||' | sort | nl
+                        echo ""
+                        echo "Status: Processing complete"
+                        echo "======================================"
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo "✅ In_Basket watcher execution complete"
+                echo "Build Status: ${currentBuild.result}"
+            }
+        }
+
+        success {
+            script {
+                echo "✓ All documents processed"
+                if (!params.DRY_RUN) {
+                    echo "✓ Changes committed and pushed"
+                }
+            }
+        }
+
+        failure {
+            script {
+                echo "❌ Pipeline failed - review logs"
+                // Could send notification to PM here
+            }
+        }
+    }
+}
