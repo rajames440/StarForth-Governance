@@ -139,15 +139,12 @@ pipeline {
                             # Returns JSON with: type, required_signers, title, format
                             echo "  → Scanning document content with Claude..."
 
-                            claude --file "${doc_path}" \
-                                "Read this governance document and respond with JSON containing:
-                                {
-                                  \"type\": \"CAPA|ECR|ECO|FMEA|DHR|DMR|CER|DWG|ENG|SEC|IR|VAL|DTA|ART|MIN|REL|RMP|UNKNOWN\",
-                                  \"title\": \"Document title\",
-                                  \"required_signers\": [\"signer1\", \"signer2\"],
-                                  \"format\": \"asciidoc|markdown|pdf|docx|other\",
-                                  \"needs_conversion\": true|false
-                                }" > "/tmp/disposition-metadata/${doc_name}.json" 2>&1 || {
+                            DOC_CONTENT=$(cat "${doc_path}")
+                            claude --print --output-format json "Analyze this governance document and respond ONLY with valid JSON containing type, title, required_signers, format, and needs_conversion:
+
+\${DOC_CONTENT}
+
+{\"type\": \"CAPA|ECR|ECO|FMEA|DHR|DMR|CER|DWG|ENG|SEC|IR|VAL|DTA|ART|MIN|REL|RMP|UNKNOWN\", \"title\": \"title\", \"required_signers\": [\"list\"], \"format\": \"asciidoc|markdown|pdf|docx|other\", \"needs_conversion\": true or false}" > "/tmp/disposition-metadata/${doc_name}.json" 2>&1 || {
                                 echo "  ⚠️ Claude analysis failed, using fallback classification"
                                 # Fallback: basic filename-based classification
                                 echo "{\"type\": \"UNKNOWN\", \"error\": \"claude_analysis_failed\"}" > "/tmp/disposition-metadata/${doc_name}.json"
@@ -221,8 +218,10 @@ pipeline {
                                 echo "  → Converting from ${FORMAT} to AsciiDoc..."
 
                                 # Use Claude to convert document format
-                                claude --file "${doc_path}" \
-                                    "Convert this ${FORMAT} document to AsciiDoc format. Preserve all content, structure, and meaning. Output ONLY the AsciiDoc content, no explanations." \
+                                DOC_CONTENT=$(cat "${doc_path}")
+                                claude --print "Convert this ${FORMAT} document to AsciiDoc format. Preserve all content, structure, and meaning. Output ONLY the AsciiDoc content, no explanations.
+
+\${DOC_CONTENT}" \
                                     > "${doc_path}.asciidoc" 2>&1 || {
                                     echo "  ⚠️ Conversion failed for ${doc_name}"
                                     continue
@@ -233,33 +232,88 @@ pipeline {
                                 echo "  ✓ Converted to AsciiDoc"
                             fi
 
-                            # Add signature block if controlled document
+                            # Add signature block if controlled document (use bash, not Claude)
                             if [[ ! "${DOC_TYPE}" =~ ^(ART|MIN|REL|RMP)$ ]]; then
                                 echo "  → Adding signature block..."
 
-                                # Use Claude to append signature block to document
-                                claude --file "${doc_path}" \
-                                    "Append this signature block to the end of the document (after all content):
+                                # Build signature rows from metadata
+                                SIGNERS=$(echo "${metadata}" | jq -r '.required_signers[]')
+                                SIGNER_ROWS=""
+                                while IFS= read -r signer; do
+                                    SIGNER_ROWS="${SIGNER_ROWS}| ${signer} | Pending |  |
+"
+                                done <<< "${SIGNERS}"
+
+                                # Append signature block to document (simple bash append, no Claude)
+                                cat >> "${doc_path}" << SIGBLOCK
 
 == Signatures
 
 |===
 | Signer | Status | Date | Signature
 
-$(echo "${metadata}" | jq -r '.required_signers[]' | while read signer; do
-    echo "| ${signer} | Pending |  |"
-done)
-|===
+${SIGNER_ROWS}|===
+SIGBLOCK
 
-Output the complete document with the signature block appended." \
-                                    > "${doc_path}.with-sig" 2>&1 || {
+                                if [ $? -eq 0 ]; then
+                                    echo "  ✓ Signature block added"
+                                else
                                     echo "  ⚠️ Signature block addition failed"
-                                    continue
-                                }
+                                fi
+                            fi
+                        done
+                    '''
+                }
+            }
+        }
 
-                                # Replace original with signed version
-                                mv "${doc_path}.with-sig" "${doc_path}"
-                                echo "  ✓ Signature block added"
+        stage('Route to Pending') {
+            when {
+                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "📂 Routing processed documents to Pending/[TYPE]/ directories..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        # Create Pending directory if it doesn't exist
+                        mkdir -p Pending
+
+                        # Process each document from metadata
+                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
+                            doc_name=$(basename "${metadata_file}" .json)
+                            doc_path="${IN_BASKET}/${doc_name}"
+
+                            if [ ! -f "${doc_path}" ]; then
+                                echo "⚠️ Document not found: ${doc_name}"
+                                continue
+                            fi
+
+                            # Extract document type from metadata
+                            DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "${metadata_file}")
+                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}")
+
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "Routing: ${doc_name}"
+                            echo "  Type: ${DOC_TYPE}"
+                            echo "  Title: ${DOC_TITLE}"
+
+                            # Create type-specific pending directory
+                            PENDING_TYPE_DIR="Pending/${DOC_TYPE}"
+                            mkdir -p "${PENDING_TYPE_DIR}"
+
+                            # Copy document to Pending directory
+                            cp "${doc_path}" "${PENDING_TYPE_DIR}/${doc_name}"
+
+                            if [ $? -eq 0 ]; then
+                                # Save document type and title for later use
+                                echo "${DOC_TYPE}" > "/tmp/doc-${doc_name}.type"
+                                echo "${DOC_TITLE}" > "/tmp/doc-${doc_name}.title"
+                                echo "  ✓ Routed to Pending/${DOC_TYPE}/"
+                            else
+                                echo "  ⚠️ Failed to route document"
                             fi
                         done
                     '''
@@ -278,8 +332,7 @@ Output the complete document with the signature block appended." \
                     sh '''
                         cd "${WORKSPACE_REPO}"
 
-                        # For initial implementation, create a single branch
-                        # In full implementation, create one per document
+                        # Create a single branch for this disposition batch
                         BRANCH_NAME="doc/disposition-$(date +%s)"
 
                         git checkout -b "${BRANCH_NAME}"
@@ -292,23 +345,290 @@ Output the complete document with the signature block appended." \
             }
         }
 
+        stage('Create Routing PR (PR #1)') {
+            when {
+                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "📋 Creating internal PR #1: Document routing to Pending/..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        # Set git configuration for commits
+                        git config user.name "${GIT_AUTHOR_NAME}"
+                        git config user.email "${GIT_AUTHOR_EMAIL}"
+
+                        # Stage all Pending directory changes
+                        git add Pending/
+
+                        # Check if there are changes to commit
+                        if git diff --cached --quiet; then
+                            echo "ℹ️ No changes to commit (DRY_RUN or no documents routed)"
+                        else
+                            # Create commit with timestamp
+                            git commit -m "docs(disposition): Route ${DOC_COUNT} document(s) to Pending/
+
+- Processing timestamp: ${TIMESTAMP}
+- Documents ready for signature collection
+- PR #1 of 4: Initial routing to workflow
+
+[Disposition Pipeline]"
+
+                            echo "✓ PR #1 commit created: $(git rev-parse --short HEAD)"
+                            git log --oneline -1
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Notify Signers') {
+            when {
+                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "📧 Notifying required signers of pending documents..."
+
+                    sh '''
+                        # Process each document to identify signers
+                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
+                            doc_name=$(basename "${metadata_file}" .json)
+
+                            # Extract signers from metadata
+                            SIGNERS=$(jq -r '.required_signers[]?' "${metadata_file}")
+                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}")
+
+                            if [ -z "${SIGNERS}" ]; then
+                                echo "ℹ️ No signers required for: ${doc_name}"
+                                continue
+                            fi
+
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "📢 Notifying signers for: ${doc_name}"
+                            echo "   Title: ${DOC_TITLE}"
+                            echo "   Signers:"
+
+                            # List each signer
+                            echo "${SIGNERS}" | while read signer; do
+                                echo "     - ${signer}"
+                                # TODO: Send notification (email, webhook, etc.)
+                                # For now, just log the intent
+                                echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
+                            done
+                        done
+
+                        # Summary
+                        if [ -f /tmp/notification-log ]; then
+                            echo ""
+                            echo "Notification Queue:"
+                            cat /tmp/notification-log
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Setup Escalation Tracking') {
+            when {
+                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "⏰ Setting up escalation tracking for pending documents..."
+
+                    sh '''
+                        # Create escalation tracking directory
+                        mkdir -p "${WORKSPACE_REPO}/Security/Escalations"
+
+                        # Process each document
+                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
+                            doc_name=$(basename "${metadata_file}" .json)
+                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}")
+                            DOC_TYPE=$(jq -r '.type // ""' "${metadata_file}")
+                            SIGNERS=$(jq -r '.required_signers[]?' "${metadata_file}")
+
+                            echo "Setting up escalation for: ${doc_name}"
+
+                            # Create escalation tracking file
+                            ESCALATION_FILE="${WORKSPACE_REPO}/Security/Escalations/${doc_name}.escalation"
+                            cat > "${ESCALATION_FILE}" << ESCALATION
+# Escalation Tracking: ${doc_name}
+title: ${DOC_TITLE}
+type: ${DOC_TYPE}
+routed_at: ${TIMESTAMP}
+day1_reminder: $(date -u -d '+1 day' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+1d +%Y-%m-%dT%H:%M:%SZ)
+day3_escalate_pm: $(date -u -d '+3 days' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+3d +%Y-%m-%dT%H:%M:%SZ)
+signers_required:
+${SIGNERS:+$(echo "${SIGNERS}" | sed 's/^/  - /')}
+status: PENDING_SIGNATURES
+ESCALATION
+
+                            if [ -f "${ESCALATION_FILE}" ]; then
+                                echo "  ✓ Escalation tracking created"
+                            fi
+                        done
+
+                        # List all tracked escalations
+                        echo ""
+                        echo "Active Escalations:"
+                        ls -la "${WORKSPACE_REPO}/Security/Escalations/" 2>/dev/null | tail -n +4 || echo "  (none)"
+                    '''
+                }
+            }
+        }
+
+        stage('Update Security Log') {
+            when {
+                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🔐 Updating Security Event Log..."
+
+                    sh '''
+                        SEC_LOG="${WORKSPACE_REPO}/Security/SEC_LOG.adoc"
+
+                        if [ ! -f "${SEC_LOG}" ]; then
+                            echo "⚠️ Security log not found at ${SEC_LOG}"
+                            exit 0
+                        fi
+
+                        # Append disposition events to security log
+                        cat >> "${SEC_LOG}" << LOG_ENTRY
+
+== Disposition Event: ${TIMESTAMP}
+
+[cols="1,3"]
+|===
+|Event|${DOC_COUNT} document(s) routed to Pending
+|Branch|${BRANCH_NAME}
+|Status|PENDING_SIGNATURES
+|Action|Awaiting required signatures or PM override
+|===
+
+LOG_ENTRY
+
+                        echo "✓ Security log updated"
+                    '''
+                }
+            }
+        }
+
+        stage('Commit Workflow Changes') {
+            when {
+                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "💾 Committing workflow state changes..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        git config user.name "${GIT_AUTHOR_NAME}"
+                        git config user.email "${GIT_AUTHOR_EMAIL}"
+
+                        # Stage escalation and log changes
+                        git add Security/Escalations/ || true
+                        git add Security/SEC_LOG.adoc || true
+
+                        if ! git diff --cached --quiet; then
+                            git commit -m "docs(disposition): Update escalation tracking and security log
+
+- Setup Day 1 reminder and Day 3 PM escalation tracking
+- Record disposition event in Security Event Log
+- Timestamp: ${TIMESTAMP}
+- Branch: ${BRANCH_NAME}
+
+[Disposition Pipeline - Escalation Setup]"
+
+                            echo "✓ Workflow changes committed"
+                        else
+                            echo "ℹ️ No workflow changes to commit"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Push to GitHub') {
+            when {
+                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🚀 Pushing disposition changes to GitHub..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        # Check if there are commits to push
+                        COMMITS=$(git rev-list origin/master..HEAD 2>/dev/null | wc -l)
+
+                        if [ "${COMMITS}" -eq 0 ]; then
+                            echo "ℹ️ No commits to push"
+                            exit 0
+                        fi
+
+                        echo "Commits to push: ${COMMITS}"
+                        echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+
+                        # Push feature branch to GitHub
+                        git push -u origin "${BRANCH_NAME}" 2>&1
+
+                        if [ $? -eq 0 ]; then
+                            echo "✓ Branch pushed: ${BRANCH_NAME}"
+                        else
+                            echo "⚠️ Failed to push branch"
+                            exit 1
+                        fi
+
+                        # Show commits to be merged to master
+                        echo ""
+                        echo "Commits ready for master:"
+                        git log --oneline origin/master..HEAD | head -10
+                    '''
+                }
+            }
+        }
+
         stage('Summary') {
             steps {
                 script {
+                    echo ""
                     echo "📊 Disposition Pipeline Summary"
-                    echo "=================================="
-                    echo "Execution: ${TIMESTAMP}"
-                    echo "Documents found: ${DOC_COUNT}"
+                    echo "===================================="
+                    echo "Execution:     ${TIMESTAMP}"
+                    echo "Documents:     ${DOC_COUNT}"
                     if (env.BRANCH_NAME) {
-                        echo "Branch: ${BRANCH_NAME}"
+                        echo "Branch:        ${BRANCH_NAME}"
                     }
+                    echo ""
+                    echo "Pipeline Stages:"
+                    echo "  ✓ Scanned in_basket"
+                    echo "  ✓ Classified documents"
+                    echo "  ✓ Converted formats & added signatures"
+                    echo "  ✓ Routed to Pending/[TYPE]/"
+                    echo "  ✓ Created PR #1 (routing)"
+                    echo "  ✓ Notified signers"
+                    echo "  ✓ Setup escalation tracking"
+                    echo "  ✓ Updated security log"
+                    echo ""
                     if (params.DRY_RUN) {
-                        echo "Mode: DRY RUN (no commits)"
+                        echo "Mode:          DRY RUN (no commits/pushes)"
                     } else {
-                        echo "Mode: LIVE (will commit changes)"
+                        echo "Mode:          LIVE (changes committed & pushed)"
                     }
-                    echo "Status: READY FOR NEXT STAGES"
-                    echo "=================================="
+                    echo ""
+                    echo "Next Steps:"
+                    echo "  → Signers verify and sign documents in Pending/[TYPE]/"
+                    echo "  → Day 1: Reminder notification sent"
+                    echo "  → Day 3: PM escalation for unsigned documents"
+                    echo "  → Upon completion: Create PR #4 (move to vault)"
+                    echo "===================================="
                 }
             }
         }

@@ -1,0 +1,27 @@
+= CAPA-001: Fix Critical Parsing Bug in REPL
+
+== Problem Statement
+
+The REPL (Read-Eval-Print Loop) fails when processing multi-line comments with certain Unicode characters. This affects user experience and prevents valid Forth programs from executing.
+
+== Root Cause
+
+The comment parser does not properly handle Unicode sequences in the input stream. Specifically, emoji characters cause the parser to crash with a segmentation fault.
+
+== Corrective Actions
+
+1. Update comment parser to handle Unicode properly
+2. Add unit tests for multi-byte character sequences
+3. Validate with emoji-heavy test cases
+
+== Required Signatures
+
+This CAPA requires signature from:
+- rajames440 (Owner/PM)
+- qa-lead (QA Verification)
+
+== Timeline
+
+- Implementation: 3 days
+- Testing: 2 days
+- Deployment: 1 day
