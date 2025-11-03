@@ -32,7 +32,7 @@ pipeline {
 
     environment {
         GOVERNANCE_REPO = 'rajames440/StarForth-Governance'
-        WORKSPACE_REPO = "${WORKSPACE}/governance"
+        WORKSPACE_REPO = "${WORKSPACE}"
         IN_BASKET = "${WORKSPACE_REPO}/in_basket"
         PENDING = "${WORKSPACE_REPO}/Pending"
         SEC_LOG = "${WORKSPACE_REPO}/Security/SEC_LOG.adoc"
