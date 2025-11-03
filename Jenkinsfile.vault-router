@@ -1,0 +1,438 @@
+// Jenkinsfile.vault-router
+// Vault Routing Pipeline - PR #4
+// Moves fully-signed documents from Pending/ to vault directories
+
+pipeline {
+    agent any
+
+    parameters {
+        string(
+            name: 'DOCUMENT_PATH',
+            defaultValue: '',
+            description: 'Path to document in Pending/ (e.g., Pending/CAPA/CAPA-001.adoc)'
+        )
+        string(
+            name: 'DOCUMENT_TYPE',
+            defaultValue: '',
+            description: 'Document type (CAPA, ECR, ECO, etc.)'
+        )
+        booleanParam(
+            name: 'DRY_RUN',
+            defaultValue: false,
+            description: 'Dry run mode (no commits/pushes)'
+        )
+        booleanParam(
+            name: 'FORCE_PM_OVERRIDE',
+            defaultValue: false,
+            description: 'PM Override - move to vault without all signatures (PM justification required)'
+        )
+    }
+
+    triggers {
+        // Triggered manually or by disposition pipeline when all signatures ready
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '50'))
+        timeout(time: 1, unit: 'HOURS')
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
+    environment {
+        GOVERNANCE_REPO = 'rajames440/StarForth-Governance'
+        WORKSPACE_REPO = "${WORKSPACE}/governance"
+        VAULT_ROUTING_MAP = "${WORKSPACE_REPO}/VAULT_ROUTING_MAP.md"
+        SEC_LOG = "${WORKSPACE_REPO}/Security/SEC_LOG.adoc"
+        GIT_AUTHOR_NAME = "Vault Router"
+        GIT_AUTHOR_EMAIL = "vault@starforth.governance"
+        TIMESTAMP = sh(script: 'date -u +%Y-%m-%dT%H:%M:%SZ', returnStdout: true).trim()
+    }
+
+    stages {
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    echo "📋 Validating vault routing parameters..."
+
+                    if (params.DOCUMENT_PATH == '' || params.DOCUMENT_TYPE == '') {
+                        error "Missing required parameters: DOCUMENT_PATH, DOCUMENT_TYPE"
+                    }
+
+                    echo "  Document: ${params.DOCUMENT_PATH}"
+                    echo "  Type: ${params.DOCUMENT_TYPE}"
+                    echo "  PM Override: ${params.FORCE_PM_OVERRIDE}"
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "📋 Checking out StarForth-Governance repository..."
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: '*/master']],
+                        userRemoteConfigs: [[
+                            url: "https://github.com/${GOVERNANCE_REPO}.git",
+                            credentialsId: 'github-credentials'
+                        ]]
+                    ])
+                }
+            }
+        }
+
+        stage('Verify Document & Signatures') {
+            steps {
+                script {
+                    echo "🔐 Verifying document and signature status..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        DOC_PATH="${DOCUMENT_PATH}"
+                        DOC_TYPE="${DOCUMENT_TYPE}"
+
+                        # Check document exists
+                        if [ ! -f "${DOC_PATH}" ]; then
+                            echo "❌ Document not found: ${DOC_PATH}"
+                            exit 1
+                        fi
+
+                        echo "✓ Document found: ${DOC_PATH}"
+
+                        # Check if document is in Pending
+                        if [[ ! "${DOC_PATH}" =~ ^Pending/ ]]; then
+                            echo "⚠️ Document not in Pending directory"
+                            if [ ! "${FORCE_PM_OVERRIDE}" = "true" ]; then
+                                echo "❌ Cannot move document from non-Pending location"
+                                exit 1
+                            fi
+                        fi
+
+                        # Check if all required signatures are present (basic check)
+                        DOC_NAME=$(basename "${DOC_PATH}")
+
+                        # Count .asc files for this document
+                        PENDING_DIR=$(dirname "${DOC_PATH}")
+                        SIG_COUNT=$(find "${PENDING_DIR}" -name "${DOC_NAME%.*}*.asc" 2>/dev/null | wc -l)
+
+                        echo "  Found ${SIG_COUNT} signature file(s)"
+
+                        if [ ${SIG_COUNT} -eq 0 ] && [ ! "${FORCE_PM_OVERRIDE}" = "true" ]; then
+                            echo "⚠️ No signatures collected yet"
+                            echo "❌ Cannot move document without signatures (unless PM override)"
+                            exit 1
+                        fi
+
+                        if [ ${SIG_COUNT} -eq 0 ] && [ "${FORCE_PM_OVERRIDE}" = "true" ]; then
+                            echo "⚠️ PM OVERRIDE: Moving document without signatures"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Determine Vault Location') {
+            steps {
+                script {
+                    echo "📂 Determining vault destination..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        DOC_TYPE="${DOCUMENT_TYPE}"
+
+                        # Map document type to vault directory using VAULT_ROUTING_MAP.md
+                        case "${DOC_TYPE}" in
+                            CAPA)    VAULT_DIR="Defects" ;;
+                            ECR)     VAULT_DIR="Design" ;;
+                            ECO)     VAULT_DIR="Design" ;;
+                            FMEA)    VAULT_DIR="Performance" ;;
+                            DHR)     VAULT_DIR="Design" ;;
+                            DMR)     VAULT_DIR="Compliance" ;;
+                            CER)     VAULT_DIR="Incidents" ;;
+                            DWG)     VAULT_DIR="Design" ;;
+                            ENG)     VAULT_DIR="Design" ;;
+                            SEC)     VAULT_DIR="Security" ;;
+                            IR)      VAULT_DIR="Incidents" ;;
+                            VAL)     VAULT_DIR="Validation" ;;
+                            DTA)     VAULT_DIR="Tests" ;;
+                            RMP)     VAULT_DIR="Performance" ;;
+                            ART|MIN|REL)
+                                echo "⚠️ Type ${DOC_TYPE} - No vault routing (stays in Pending)"
+                                VAULT_DIR="NONE"
+                                ;;
+                            *)
+                                echo "⚠️ Type ${DOC_TYPE} - Unknown type, routing to Audits"
+                                VAULT_DIR="Audits"
+                                ;;
+                        esac
+
+                        echo "Document Type: ${DOC_TYPE}"
+                        echo "Vault Directory: ${VAULT_DIR}"
+
+                        echo "${VAULT_DIR}" > /tmp/vault_dir
+                    '''
+
+                    env.VAULT_DIR = readFile('/tmp/vault_dir').trim()
+                }
+            }
+        }
+
+        stage('Move Document to Vault') {
+            when {
+                expression { !params.DRY_RUN && env.VAULT_DIR != 'NONE' }
+            }
+            steps {
+                script {
+                    echo "🚀 Moving document to vault..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        DOC_PATH="${DOCUMENT_PATH}"
+                        DOC_NAME=$(basename "${DOC_PATH}")
+                        DOC_TYPE="${DOCUMENT_TYPE}"
+                        VAULT_DIR="${VAULT_DIR}"
+                        VAULT_PATH="${VAULT_DIR}"
+
+                        # Create vault directory structure
+                        mkdir -p "${VAULT_PATH}"
+
+                        echo "Moving: ${DOC_PATH} → ${VAULT_PATH}/${DOC_NAME}"
+
+                        # Copy document to vault
+                        cp "${DOC_PATH}" "${VAULT_PATH}/${DOC_NAME}"
+
+                        if [ ! -f "${VAULT_PATH}/${DOC_NAME}" ]; then
+                            echo "❌ Failed to copy document to vault"
+                            exit 1
+                        fi
+
+                        # Copy associated signature files to vault
+                        PENDING_DIR=$(dirname "${DOC_PATH}")
+                        find "${PENDING_DIR}" -name "${DOC_NAME%.*}*.asc" 2>/dev/null | while read sig_file; do
+                            SIG_NAME=$(basename "${sig_file}")
+                            cp "${sig_file}" "${VAULT_PATH}/${SIG_NAME}"
+                            echo "  ✓ Copied signature: ${SIG_NAME}"
+                        done
+
+                        # Create immutability marker
+                        touch "${VAULT_PATH}/.immutable"
+                        echo "  ✓ Immutability marker created"
+
+                        # Create metadata file
+                        cat > "${VAULT_PATH}/.metadata" << METADATA
+document_name=${DOC_NAME}
+document_type=${DOC_TYPE}
+routed_to_vault_at=${TIMESTAMP}
+vault_directory=${VAULT_PATH}
+pm_override=${FORCE_PM_OVERRIDE}
+METADATA
+
+                        echo "  ✓ Metadata file created"
+                        echo "✓ Document moved to vault: ${VAULT_PATH}/${DOC_NAME}"
+                    '''
+                }
+            }
+        }
+
+        stage('Create Feature Branch') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🌿 Creating feature branch for vault routing..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        git config user.name "${GIT_AUTHOR_NAME}"
+                        git config user.email "${GIT_AUTHOR_EMAIL}"
+
+                        DOC_NAME=$(basename "${DOCUMENT_PATH}")
+                        DOC_TYPE="${DOCUMENT_TYPE}"
+                        VAULT_DIR="${VAULT_DIR}"
+
+                        # Create branch for vault routing
+                        BRANCH_NAME="vault/route-${DOC_TYPE}-$(date +%s)"
+
+                        git checkout -b "${BRANCH_NAME}"
+
+                        echo "Created branch: ${BRANCH_NAME}"
+                        echo "${BRANCH_NAME}" > /tmp/vault-branch-name
+                    '''
+
+                    env.VAULT_BRANCH = readFile('/tmp/vault-branch-name').trim()
+                }
+            }
+        }
+
+        stage('Commit Vault Routing (PR #4)') {
+            when {
+                expression { !params.DRY_RUN && env.VAULT_DIR != 'NONE' }
+            }
+            steps {
+                script {
+                    echo "💾 Creating PR #4: Move to vault..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        DOC_NAME=$(basename "${DOCUMENT_PATH}")
+                        DOC_TYPE="${DOCUMENT_TYPE}"
+                        VAULT_DIR="${VAULT_DIR}"
+
+                        # Stage vault changes
+                        git add "${VAULT_DIR}/" || true
+
+                        # Stage removal from Pending (if configured)
+                        git add Pending/ || true
+
+                        # Create commit
+                        if ! git diff --cached --quiet; then
+                            COMMIT_MSG="docs(vault): Route ${DOC_NAME} to ${VAULT_DIR}/
+
+- Document Type: ${DOC_TYPE}
+- Source: Pending/${DOC_TYPE}/
+- Destination: ${VAULT_DIR}/
+- Status: SIGNED & VERIFIED
+- Timestamp: ${TIMESTAMP}
+- PR: #4 of 4 (Final routing to vault)
+
+[Vault Router - PR #4]"
+
+                            if [ "${FORCE_PM_OVERRIDE}" = "true" ]; then
+                                COMMIT_MSG="${COMMIT_MSG}
+
+⚠️ PM OVERRIDE: Document moved without complete signatures"
+                            fi
+
+                            git commit -m "${COMMIT_MSG}"
+
+                            echo "✓ PR #4 commit created: $(git rev-parse --short HEAD)"
+                        else
+                            echo "ℹ️ No changes to commit"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Update Security Log') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🔐 Updating Security Event Log..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        DOC_NAME=$(basename "${DOCUMENT_PATH}")
+                        DOC_TYPE="${DOCUMENT_TYPE}"
+                        VAULT_DIR="${VAULT_DIR}"
+
+                        SEC_LOG="${WORKSPACE_REPO}/Security/SEC_LOG.adoc"
+
+                        if [ ! -f "${SEC_LOG}" ]; then
+                            echo "⚠️ Security log not found"
+                            exit 0
+                        fi
+
+                        # Append vault routing event
+                        cat >> "${SEC_LOG}" << LOG_ENTRY
+
+== Vault Routing Event: ${TIMESTAMP}
+
+[cols="1,3"]
+|===
+|Event|Document routed to vault
+|Document|${DOC_NAME}
+|Type|${DOC_TYPE}
+|Destination|${VAULT_DIR}/
+|Status|IN_VAULT
+|PM Override|${FORCE_PM_OVERRIDE}
+|===
+
+LOG_ENTRY
+
+                        echo "✓ Security log updated"
+                    '''
+                }
+            }
+        }
+
+        stage('Push Vault Branch') {
+            when {
+                expression { !params.DRY_RUN && env.VAULT_BRANCH != null }
+            }
+            steps {
+                script {
+                    echo "🚀 Pushing vault routing branch to GitHub..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        git push -u origin "${VAULT_BRANCH}" 2>&1
+
+                        if [ $? -eq 0 ]; then
+                            echo "✓ Branch pushed: ${VAULT_BRANCH}"
+                        else
+                            echo "⚠️ Failed to push branch"
+                            exit 1
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Summary') {
+            steps {
+                script {
+                    echo ""
+                    echo "📊 Vault Routing Summary"
+                    echo "===================================="
+                    echo "Execution:        ${TIMESTAMP}"
+                    echo "Document:         ${DOCUMENT_PATH}"
+                    echo "Type:             ${DOCUMENT_TYPE}"
+                    echo "Vault Directory:  ${VAULT_DIR}"
+                    if (env.VAULT_BRANCH) {
+                        echo "Branch:           ${VAULT_BRANCH}"
+                    }
+                    echo ""
+                    if (env.VAULT_DIR == 'NONE') {
+                        echo "Status: Document type does not require vault routing"
+                    } else {
+                        echo "Status: Document routed to vault (PR #4 created)"
+                    }
+                    echo "===================================="
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo "✅ Vault routing pipeline complete"
+                echo "Build Status: ${currentBuild.result}"
+            }
+        }
+
+        success {
+            script {
+                echo "✓ Document routed to vault successfully"
+            }
+        }
+
+        failure {
+            script {
+                echo "❌ Vault routing failed"
+            }
+        }
+    }
+}

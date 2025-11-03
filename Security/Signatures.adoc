@@ -1,0 +1,257 @@
+= Authorized Signers Registry
+
+**Version:** 1.0
+**Last Updated:** 2025-11-03
+**Authority:** PM (rajames440)
+
+This document maintains the authoritative list of individuals authorized to digitally sign governance documents in the StarForth-Governance repository.
+
+== Signing Authority Levels
+
+[cols="1,3,2"]
+|===
+|Level|Authority|Document Types Authorized
+
+|OWNER
+|Full authority over all document types. Can override incomplete signatures.
+|CAPA, ECR, ECO, FMEA, DHR, DMR, CER, DWG, ENG, SEC, IR, VAL, DTA
+
+|ENGINEERING
+|Technical review and approval authority.
+|ECR, ECO, FMEA, DWG, ENG, VAL, DTA
+
+|QA_LEAD
+|Quality assurance and testing authority.
+|CAPA, FMEA, VAL, DTA
+
+|SECURITY
+|Security review authority.
+|SEC, FMEA, ECR, ECO
+
+|COMPLIANCE
+|Regulatory compliance verification.
+|CAPA, DHR, DMR, VAL
+
+|INCIDENT_MANAGER
+|Incident and risk authority.
+|IR, RMP, FMEA
+
+|===
+
+== Authorized Signers
+
+[cols="1,2,2,1,1"]
+|===
+|Username|Name|Email|Authority Level|Active
+
+|rajames440
+|Rajames (PM/Owner)
+|rajames@starforth.dev
+|OWNER
+|✓
+
+|eng-manager
+|Engineering Manager
+|eng@starforth.dev
+|ENGINEERING
+|✓
+
+|qa-lead
+|QA Lead
+|qa@starforth.dev
+|QA_LEAD
+|✓
+
+|security-officer
+|Security Officer
+|security@starforth.dev
+|SECURITY
+|✓
+
+|compliance-lead
+|Compliance Lead
+|compliance@starforth.dev
+|COMPLIANCE
+|✓
+
+|incident-response
+|Incident Response Lead
+|incidents@starforth.dev
+|INCIDENT_MANAGER
+|✓
+
+|===
+
+== Document Type → Required Signers Mapping
+
+[cols="1,3,3"]
+|===
+|Document Type|Description|Required Signers (All Must Sign OR PM Override)
+
+|CAPA
+|Corrective Action
+|rajames440, qa-lead
+
+|ECR
+|Engineering Change Request
+|rajames440, eng-manager
+
+|ECO
+|Engineering Change Order
+|rajames440, eng-manager
+
+|FMEA
+|Failure Mode & Effects Analysis
+|rajames440, qa-lead, security-officer
+
+|DHR
+|Design History Record (Controlled)
+|rajames440, eng-manager
+
+|DMR
+|Device Master Record (Controlled)
+|rajames440, compliance-lead
+
+|CER
+|Complaint/Event Report
+|rajames440, incident-response
+
+|DWG
+|Drawing/Schematic
+|rajames440, eng-manager
+
+|ENG
+|Engineering Document
+|rajames440, eng-manager
+
+|SEC
+|Security Document
+|rajames440, security-officer
+
+|IR
+|Incident Report
+|rajames440, incident-response
+
+|VAL
+|Validation Document
+|rajames440, qa-lead
+
+|DTA
+|Data/Test Results
+|rajames440, qa-lead
+
+|ART
+|Article/Reference (No Signature Required)
+|_(none)_
+
+|MIN
+|Minutes (No Signature Required)
+|_(none)_
+
+|REL
+|Release Notes (No Signature Required)
+|_(none)_
+
+|RMP
+|Risk Management Plan (No Signature Required)
+|_(none)_
+
+|===
+
+== Signature File Format
+
+Signatures are stored as detached PGP files adjacent to documents:
+
+```
+Pending/CAPA/CAPA-001.adoc
+Pending/CAPA/CAPA-001.rajames440.asc       ← PGP signature from rajames440
+Pending/CAPA/CAPA-001.qa-lead.asc          ← PGP signature from qa-lead
+```
+
+Each `.asc` file is a detached GPG signature. Verification:
+
+```bash
+gpg --verify CAPA-001.rajames440.asc CAPA-001.adoc
+```
+
+== Signature Status in Documents
+
+Documents contain an AsciiDoc signature table showing collection progress:
+
+[cols="1,1,1,1"]
+|===
+|Signer|Status|Date|Signature
+
+|rajames440
+|Signed ✓
+|2025-11-03
+|GPG ID: ABCD1234
+
+|qa-lead
+|Pending
+|(waiting)
+|(none)
+
+|===
+
+== Adding New Signers
+
+To add a new authorized signer:
+
+1. Obtain their full name, email, and GPG public key fingerprint
+2. Update this document (Signatures.adoc)
+3. Add to appropriate Authority Level group
+4. Create pull request with change
+5. Requires PM (rajames440) approval
+
+== Revoking Signers
+
+To revoke signer authority:
+
+1. Mark signer as `Inactive` in this document
+2. Document reason for revocation
+3. Any documents awaiting that signer's signature are escalated to PM
+4. Create pull request with change
+
+== Signature Validation Process
+
+When a signature file is detected:
+
+1. **File Presence:** Verify `.asc` file exists
+2. **Filename Format:** Validate `[doc-name].[signer-username].asc`
+3. **Signer Authorization:** Check signer in Authorized Signers list
+4. **Signature Validity:** Verify GPG signature matches document content
+5. **Status Update:** Update signature table with timestamp
+6. **Create PR:** Create signature collection PR (PR #2 or #3)
+7. **Merge:** Merge to master once verified
+
+== Document Controlled Status
+
+**Controlled Documents** (require signature + vault storage):
+- CAPA, ECR, ECO, FMEA, DHR, DMR, CER, DWG, ENG, SEC, IR, VAL, DTA
+
+**Uncontrolled Documents** (no signature required, no vault storage):
+- ART (Articles/References)
+- MIN (Minutes)
+- REL (Release Notes)
+- RMP (Risk Management Plans)
+
+Uncontrolled documents remain in Pending/ as permanent reference material.
+
+== Change History
+
+[cols="1,2,2"]
+|===
+|Date|Change|Authorized By
+
+|2025-11-03
+|Initial signature registry created
+|rajames440
+
+|===
+
+---
+
+**Document Classification:** SEC (Security/Control)
+**Review Frequency:** Annually or as needed
+**Owner:** Rajames (rajames440)
