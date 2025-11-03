@@ -390,9 +390,11 @@ SIGBLOCK
             }
             steps {
                 script {
-                    echo "📧 Notifying required signers of pending documents..."
+                    echo "📧 Notifying required signers via GitHub..."
 
                     sh '''
+                        cd "${WORKSPACE_REPO}"
+
                         # Process each document to identify signers
                         find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
                             doc_name=$(basename "${metadata_file}" .json)
@@ -400,6 +402,7 @@ SIGBLOCK
                             # Extract signers from metadata
                             SIGNERS=$(jq -r '.required_signers[]?' "${metadata_file}")
                             DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}")
+                            DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "${metadata_file}")
 
                             if [ -z "${SIGNERS}" ]; then
                                 echo "ℹ️ No signers required for: ${doc_name}"
@@ -409,21 +412,65 @@ SIGBLOCK
                             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                             echo "📢 Notifying signers for: ${doc_name}"
                             echo "   Title: ${DOC_TITLE}"
+                            echo "   Type: ${DOC_TYPE}"
                             echo "   Signers:"
 
-                            # List each signer
+                            # Build list of signers with @ mentions
+                            SIGNER_MENTIONS=""
                             echo "${SIGNERS}" | while read signer; do
                                 echo "     - ${signer}"
-                                # TODO: Send notification (email, webhook, etc.)
-                                # For now, just log the intent
-                                echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
+                                SIGNER_MENTIONS="${SIGNER_MENTIONS}@${signer} "
                             done
+
+                            # Create GitHub issue notification
+                            if command -v gh &> /dev/null; then
+                                echo "  → Creating GitHub issue notification..."
+
+                                # Create issue with signer mentions
+                                ISSUE_BODY="Document pending signature collection.
+
+**Document:** \`${doc_name}\`
+**Type:** ${DOC_TYPE}
+**Title:** ${DOC_TITLE}
+
+**Required Signers:**
+$(echo "${SIGNERS}" | sed 's/^/- @/' | paste -sd '' -)
+
+**Action Required:**
+1. Review document in \`Pending/${DOC_TYPE}/${doc_name}\`
+2. Sign with GPG: \`gpg --detach-sign --armor ${doc_name}\`
+3. Create detached signature: \`${doc_name}.[your-username].asc\`
+4. Commit to repository or notify pipeline
+
+**Timeline:**
+- Day 1: Reminder notification
+- Day 3: PM escalation if not signed
+
+Created: ${TIMESTAMP}
+Branch: ${BRANCH_NAME}"
+
+                                gh issue create \
+                                  --title "📋 Document Pending Signature: ${doc_name}" \
+                                  --body "${ISSUE_BODY}" \
+                                  --label "governance,signature-needed" \
+                                  --assignee ${SIGNERS} 2>&1 || {
+                                    echo "  ⚠️ GitHub issue creation may have failed (check below)"
+                                }
+
+                                echo "  ✓ GitHub issue created and signers assigned"
+                            else
+                                echo "  ⚠️ gh CLI not available, falling back to notification log"
+                                echo "[NOTIFY] GitHub Issue: ${doc_name}" >> /tmp/notification-log
+                                echo "${SIGNERS}" | while read signer; do
+                                    echo "[NOTIFY] @${signer}: Please sign ${doc_name}" >> /tmp/notification-log
+                                done
+                            fi
                         done
 
                         # Summary
                         if [ -f /tmp/notification-log ]; then
                             echo ""
-                            echo "Notification Queue:"
+                            echo "Notification Summary:"
                             cat /tmp/notification-log
                         fi
                     '''
