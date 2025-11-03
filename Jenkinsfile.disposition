@@ -113,32 +113,55 @@ pipeline {
             }
         }
 
-        stage('Classify Documents') {
+        stage('Classify & Extract Metadata') {
             when {
                 expression { env.DOC_COUNT != "0" }
             }
             steps {
                 script {
-                    echo "🔬 Classifying documents by type..."
+                    echo "🔬 Using Claude to classify documents and extract metadata..."
 
                     sh '''
                         cd "${IN_BASKET}"
 
-                        # Read each document and classify
+                        # Create temporary metadata directory
+                        mkdir -p /tmp/disposition-metadata
+
+                        # Read each document and use Claude to classify
                         find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort | while read doc; do
                             doc_name=$(basename "$doc")
-                            echo "  Classifying: ${doc_name}"
+                            doc_path="${IN_BASKET}/${doc_name}"
 
-                            # For now, basic classification based on filename
-                            # Full Claude classification to be implemented
-                            if [[ "$doc_name" == *"CAPA"* ]]; then
-                                echo "    Type: CAPA"
-                            elif [[ "$doc_name" == *"ECR"* ]]; then
-                                echo "    Type: ECR"
-                            elif [[ "$doc_name" == *"FMEA"* ]]; then
-                                echo "    Type: FMEA"
-                            else
-                                echo "    Type: UNKNOWN (requires Claude classification)"
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "Analyzing: ${doc_name}"
+
+                            # Use Claude to analyze document
+                            # Returns JSON with: type, required_signers, title, format
+                            echo "  → Scanning document content with Claude..."
+
+                            claude --file "${doc_path}" \
+                                "Read this governance document and respond with JSON containing:
+                                {
+                                  \"type\": \"CAPA|ECR|ECO|FMEA|DHR|DMR|CER|DWG|ENG|SEC|IR|VAL|DTA|ART|MIN|REL|RMP|UNKNOWN\",
+                                  \"title\": \"Document title\",
+                                  \"required_signers\": [\"signer1\", \"signer2\"],
+                                  \"format\": \"asciidoc|markdown|pdf|docx|other\",
+                                  \"needs_conversion\": true|false
+                                }" > "/tmp/disposition-metadata/${doc_name}.json" 2>&1 || {
+                                echo "  ⚠️ Claude analysis failed, using fallback classification"
+                                # Fallback: basic filename-based classification
+                                echo "{\"type\": \"UNKNOWN\", \"error\": \"claude_analysis_failed\"}" > "/tmp/disposition-metadata/${doc_name}.json"
+                            }
+
+                            # Display results
+                            if [ -f "/tmp/disposition-metadata/${doc_name}.json" ]; then
+                                DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "/tmp/disposition-metadata/${doc_name}.json")
+                                DOC_TITLE=$(jq -r '.title // ""' "/tmp/disposition-metadata/${doc_name}.json")
+                                SIGNERS=$(jq -r '.required_signers // []' "/tmp/disposition-metadata/${doc_name}.json")
+
+                                echo "  Type: ${DOC_TYPE}"
+                                echo "  Title: ${DOC_TITLE}"
+                                echo "  Signers Required: ${SIGNERS}"
                             fi
                         done
                     '''
@@ -165,6 +188,80 @@ pipeline {
                         # Show status
                         echo "Status:"
                         git status --short | head -20
+                    '''
+                }
+            }
+        }
+
+        stage('Convert Formats & Add Signatures') {
+            when {
+                expression { env.DOC_COUNT != "0" }
+            }
+            steps {
+                script {
+                    echo "🔄 Converting formats to AsciiDoc and adding signature blocks..."
+
+                    sh '''
+                        cd "${IN_BASKET}"
+
+                        # Process each document metadata
+                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
+                            doc_name=$(basename "${metadata_file}" .json)
+                            doc_path="${IN_BASKET}/${doc_name}"
+                            metadata=$(cat "${metadata_file}")
+
+                            echo "Processing metadata for: ${doc_name}"
+
+                            # Check if format conversion needed
+                            NEEDS_CONVERSION=$(echo "${metadata}" | jq -r '.needs_conversion // false')
+                            FORMAT=$(echo "${metadata}" | jq -r '.format // "unknown"')
+                            DOC_TYPE=$(echo "${metadata}" | jq -r '.type // "UNKNOWN"')
+
+                            if [ "${NEEDS_CONVERSION}" = "true" ] && [ "${FORMAT}" != "asciidoc" ]; then
+                                echo "  → Converting from ${FORMAT} to AsciiDoc..."
+
+                                # Use Claude to convert document format
+                                claude --file "${doc_path}" \
+                                    "Convert this ${FORMAT} document to AsciiDoc format. Preserve all content, structure, and meaning. Output ONLY the AsciiDoc content, no explanations." \
+                                    > "${doc_path}.asciidoc" 2>&1 || {
+                                    echo "  ⚠️ Conversion failed for ${doc_name}"
+                                    continue
+                                }
+
+                                # Replace original with converted version
+                                mv "${doc_path}.asciidoc" "${doc_path}"
+                                echo "  ✓ Converted to AsciiDoc"
+                            fi
+
+                            # Add signature block if controlled document
+                            if [[ ! "${DOC_TYPE}" =~ ^(ART|MIN|REL|RMP)$ ]]; then
+                                echo "  → Adding signature block..."
+
+                                # Use Claude to append signature block to document
+                                claude --file "${doc_path}" \
+                                    "Append this signature block to the end of the document (after all content):
+
+== Signatures
+
+|===
+| Signer | Status | Date | Signature
+
+$(echo "${metadata}" | jq -r '.required_signers[]' | while read signer; do
+    echo "| ${signer} | Pending |  |"
+done)
+|===
+
+Output the complete document with the signature block appended." \
+                                    > "${doc_path}.with-sig" 2>&1 || {
+                                    echo "  ⚠️ Signature block addition failed"
+                                    continue
+                                }
+
+                                # Replace original with signed version
+                                mv "${doc_path}.with-sig" "${doc_path}"
+                                echo "  ✓ Signature block added"
+                            fi
+                        done
                     '''
                 }
             }
