@@ -1,0 +1,366 @@
+name: CAPA Vault Snapshot - Immutable Audit Trail
+
+# Workflow for capturing immutable snapshots of CAPA issues at every state transition
+# Repository: StarForth-Governance
+# Purpose: Create complete audit trail for compliance and governance
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "CAPA issue number to snapshot (from StarForth repo)"
+        required: true
+        type: number
+
+  # Triggered by PR events in StarForth
+  # Secondary workflow detects and dispatches this workflow
+  repository_dispatch:
+    types:
+      - capa-state-changed
+
+  # Manual scheduled trigger (daily backup)
+  schedule:
+    - cron: '0 2 * * *'  # 2 AM UTC daily
+
+jobs:
+  # Job 1: Capture CAPA snapshot
+  capture-snapshot:
+    name: Capture CAPA #${{ inputs.issue_number }} Snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: read
+
+    env:
+      CAPA_REPO: rajames440/StarForth
+      GOVERNANCE_REPO: rajames440/StarForth-Governance
+      PROJECT_NUMBER: 5
+      PROJECT_OWNER: rajames440
+
+    steps:
+      - name: Checkout StarForth-Governance
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.GOVERNANCE_REPO }}
+          token: ${{ secrets.GOVERNANCE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          path: governance
+
+      - name: Fetch CAPA issue details from StarForth
+        id: fetch-issue
+        env:
+          GH_TOKEN: ${{ secrets.GOVERNANCE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM=${{ inputs.issue_number || github.event.client_payload.issue_number }}
+
+          if [ -z "$ISSUE_NUM" ]; then
+            echo "❌ No issue number provided"
+            exit 1
+          fi
+
+          echo "📋 Fetching CAPA #${ISSUE_NUM} from StarForth..."
+
+          # Get issue details (using gh CLI)
+          ISSUE_JSON=$(gh issue view $ISSUE_NUM \
+            --repo ${{ env.CAPA_REPO }} \
+            --json title,body,state,createdAt,closedAt,author,assignees,labels,number \
+            --jq '.')
+
+          # Extract fields
+          TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
+          BODY=$(echo "$ISSUE_JSON" | jq -r '.body')
+          GH_STATE=$(echo "$ISSUE_JSON" | jq -r '.state')
+          CREATED=$(echo "$ISSUE_JSON" | jq -r '.createdAt')
+          CLOSED=$(echo "$ISSUE_JSON" | jq -r '.closedAt')
+          AUTHOR=$(echo "$ISSUE_JSON" | jq -r '.author.login')
+          ASSIGNEES=$(echo "$ISSUE_JSON" | jq -r '.assignees[].login' | tr '\n' ',' | sed 's/,$//')
+          LABELS=$(echo "$ISSUE_JSON" | jq -r '.labels[].name' | tr '\n' ',' | sed 's/,$//')
+
+          # Output for next steps
+          echo "issue_number=$ISSUE_NUM" >> $GITHUB_OUTPUT
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "body=$BODY" >> $GITHUB_OUTPUT
+          echo "gh_state=$GH_STATE" >> $GITHUB_OUTPUT
+          echo "created_at=$CREATED" >> $GITHUB_OUTPUT
+          echo "closed_at=$CLOSED" >> $GITHUB_OUTPUT
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "assignees=$ASSIGNEES" >> $GITHUB_OUTPUT
+          echo "labels=$LABELS" >> $GITHUB_OUTPUT
+
+      - name: Fetch all comments (complete history)
+        id: fetch-comments
+        env:
+          GH_TOKEN: ${{ secrets.GOVERNANCE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM=${{ steps.fetch-issue.outputs.issue_number }}
+
+          echo "💬 Fetching all comments for CAPA #${ISSUE_NUM}..."
+
+          # Get all comments (limit 100 per API)
+          COMMENTS=$(gh issue view $ISSUE_NUM \
+            --repo ${{ env.CAPA_REPO }} \
+            --json comments \
+            --jq '.comments | length')
+
+          echo "comments_count=$COMMENTS" >> $GITHUB_OUTPUT
+
+          # Save comments JSON for processing
+          gh issue view $ISSUE_NUM \
+            --repo ${{ env.CAPA_REPO }} \
+            --json comments \
+            > /tmp/comments.json
+
+      - name: Query Kanban Status from Project V2
+        id: fetch-status
+        env:
+          GH_TOKEN: ${{ secrets.GOVERNANCE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM=${{ steps.fetch-issue.outputs.issue_number }}
+
+          echo "📊 Querying Kanban status for CAPA #${ISSUE_NUM}..."
+
+          # GraphQL query to get current Status field value
+          QUERY='query($owner: String!, $number: Int!) {
+            user(login: $owner) {
+              projectV2(number: $number) {
+                items(first: 100) {
+                  nodes {
+                    id
+                    content {
+                      ... on Issue { number }
+                    }
+                    fieldValues(first: 50) {
+                      nodes {
+                        ... on ProjectV2ItemFieldSingleSelectValue {
+                          field { name }
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }'
+
+          RESULT=$(gh api graphql \
+            -F owner="${{ env.PROJECT_OWNER }}" \
+            -F number=${{ env.PROJECT_NUMBER }} \
+            -f query="$QUERY")
+
+          # Find the status for this issue
+          STATUS=$(echo "$RESULT" | jq -r \
+            ".data.user.projectV2.items.nodes[] |
+             select(.content.number == $ISSUE_NUM) |
+             .fieldValues.nodes[] |
+             select(.field.name == \"Status\") |
+             .name" 2>/dev/null || echo "CREATE")
+
+          if [ -z "$STATUS" ] || [ "$STATUS" = "null" ]; then
+            STATUS="CREATE"
+          fi
+
+          echo "Current Status: $STATUS"
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+      - name: Build AsciiDoc snapshot
+        id: build-adoc
+        run: |
+          ISSUE_NUM=${{ steps.fetch-issue.outputs.issue_number }}
+          TITLE="${{ steps.fetch-issue.outputs.title }}"
+          STATE="${{ steps.fetch-status.outputs.status }}"
+          CREATED="${{ steps.fetch-issue.outputs.created_at }}"
+          AUTHOR="${{ steps.fetch-issue.outputs.author }}"
+          ASSIGNEES="${{ steps.fetch-issue.outputs.assignees }}"
+          LABELS="${{ steps.fetch-issue.outputs.labels }}"
+
+          # Create state slug for filename
+          STATE_SLUG=$(echo "$STATE" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
+          SNAPSHOT_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # Create directory
+          mkdir -p governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}
+
+          # Create AsciiDoc file
+          cat > governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc << 'EOF'
+          = CAPA #$ISSUE_NUM: $TITLE
+          :docid: CAPA-$ISSUE_NUM
+          :github-issue: $ISSUE_NUM
+          :snapshot-id: CAPA-$ISSUE_NUM-$STATE_SLUG
+          :snapshot-date: $SNAPSHOT_TIME
+          :state: $STATE
+          :author: $AUTHOR
+          :doctype: article
+          :sectnums:
+          :toc: left
+
+          == Snapshot Metadata
+
+          * **GitHub Issue:** #$ISSUE_NUM
+          * **Title:** $TITLE
+          * **Current State:** $STATE
+          * **Snapshot Created:** $SNAPSHOT_TIME
+          * **Author:** @$AUTHOR
+          * **Assignees:** $ASSIGNEES
+          * **Labels:** $LABELS
+          * **Created:** $CREATED
+
+          == Original Issue Description
+
+          ____
+          ${{ steps.fetch-issue.outputs.body }}
+          ____
+
+          == All Comments (Complete History)
+
+          $(cat /tmp/comments.json | jq -r '.comments[] | "=== Comment by @\(.author.login) at \(.createdAt)\n\n\(.body)\n"')
+
+          == Snapshot Summary
+
+          This snapshot represents the complete state of CAPA #$ISSUE_NUM at the **$STATE** state.
+
+          * **Snapshot ID:** CAPA-$ISSUE_NUM-$STATE_SLUG
+          * **Generated:** $SNAPSHOT_TIME
+          * **Vault Location:** in_basket/CAPAs/CAPA-$ISSUE_NUM/CAPA-$ISSUE_NUM-$STATE_SLUG.adoc
+          * **Comment Count:** ${{ steps.fetch-comments.outputs.comments_count }}
+
+          === Document Immutability
+
+          This document is stored in the vault and cannot be modified.
+          All future state transitions will generate additional snapshots in the same directory.
+
+          [NOTE]
+          ====
+          The complete audit trail for this CAPA is preserved in:
+          `in_basket/CAPAs/CAPA-$ISSUE_NUM/`
+
+          Each state transition creates a new snapshot file.
+          Nothing is ever deleted.
+          ====
+
+          EOF
+
+          # Replace variables in generated file
+          sed -i "s|\$ISSUE_NUM|$ISSUE_NUM|g" governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc
+          sed -i "s|\$TITLE|$TITLE|g" governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc
+          sed -i "s|\$STATE|$STATE|g" governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc
+          sed -i "s|\$STATE_SLUG|$STATE_SLUG|g" governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc
+          sed -i "s|\$SNAPSHOT_TIME|$SNAPSHOT_TIME|g" governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc
+          sed -i "s|\$AUTHOR|$AUTHOR|g" governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc
+          sed -i "s|\$ASSIGNEES|$ASSIGNEES|g" governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc
+          sed -i "s|\$LABELS|$LABELS|g" governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc
+          sed -i "s|\$CREATED|$CREATED|g" governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}/CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc
+
+          echo "snapshot_file=CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc" >> $GITHUB_OUTPUT
+          echo "snapshot_time=$SNAPSHOT_TIME" >> $GITHUB_OUTPUT
+
+      - name: Create or update MANIFEST.json
+        run: |
+          ISSUE_NUM=${{ steps.fetch-issue.outputs.issue_number }}
+          STATE="${{ steps.fetch-status.outputs.status }}"
+          STATE_SLUG=$(echo "$STATE" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
+          SNAPSHOT_TIME="${{ steps.build-adoc.outputs.snapshot_time }}"
+
+          DIR="governance/in_basket/CAPAs/CAPA-${ISSUE_NUM}"
+
+          # Check if MANIFEST exists
+          if [ -f "${DIR}/MANIFEST.json" ]; then
+            # Update existing manifest with new snapshot
+            jq ".last_updated = \"$SNAPSHOT_TIME\" |
+                .snapshots += [{\"state\": \"$STATE\", \"file\": \"CAPA-${ISSUE_NUM}-${STATE_SLUG}.adoc\", \"timestamp\": \"$SNAPSHOT_TIME\"}]" \
+              "${DIR}/MANIFEST.json" > "${DIR}/MANIFEST.json.tmp"
+            mv "${DIR}/MANIFEST.json.tmp" "${DIR}/MANIFEST.json"
+          else
+            # Create new manifest
+            cat > ${DIR}/MANIFEST.json << 'JSON'
+          {
+            "capa_id": ${{ steps.fetch-issue.outputs.issue_number }},
+            "title": "${{ steps.fetch-issue.outputs.title }}",
+            "author": "${{ steps.fetch-issue.outputs.author }}",
+            "created_at": "${{ steps.fetch-issue.outputs.created_at }}",
+            "closed_at": "${{ steps.fetch-issue.outputs.closed_at }}",
+            "github_state": "${{ steps.fetch-issue.outputs.gh_state }}",
+            "kanban_state": "${{ steps.fetch-status.outputs.status }}",
+            "assignees": [${{ steps.fetch-issue.outputs.assignees | replace(',', '","') | replace('"', '"') }}],
+            "labels": [${{ steps.fetch-issue.outputs.labels | replace(',', '","') | replace('"', '"') }}],
+            "comments_count": ${{ steps.fetch-comments.outputs.comments_count }},
+            "snapshots": [{
+              "state": "${{ steps.fetch-status.outputs.status }}",
+              "file": "${{ steps.build-adoc.outputs.snapshot_file }}",
+              "timestamp": "${{ steps.build-adoc.outputs.snapshot_time }}"
+            }],
+            "vault_location": "in_basket/CAPAs/CAPA-${{ steps.fetch-issue.outputs.issue_number }}/",
+            "last_updated": "${{ steps.build-adoc.outputs.snapshot_time }}"
+          }
+          JSON
+          fi
+
+      - name: Commit and push snapshot to vault
+        env:
+          GH_TOKEN: ${{ secrets.GOVERNANCE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          cd governance
+
+          ISSUE_NUM=${{ steps.fetch-issue.outputs.issue_number }}
+          STATE="${{ steps.fetch-status.outputs.status }}"
+          SNAPSHOT_FILE="${{ steps.build-adoc.outputs.snapshot_file }}"
+
+          git config user.name "CAPA Vault System"
+          git config user.email "capa-vault@starforth.governance"
+
+          git add in_basket/CAPAs/CAPA-${ISSUE_NUM}/
+
+          if ! git diff --cached --quiet; then
+            git commit -m "CAPA #${ISSUE_NUM}: Snapshot at ${STATE} state
+
+- Snapshot: $SNAPSHOT_FILE
+- State: ${STATE}
+- Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+- Immutable archive entry"
+
+            git push origin HEAD
+          else
+            echo "No changes to commit"
+          fi
+
+      - name: Workflow summary
+        run: |
+          echo "✅ CAPA #${{ steps.fetch-issue.outputs.issue_number }} snapshot captured"
+          echo ""
+          echo "📋 Details:"
+          echo "  - Issue: #${{ steps.fetch-issue.outputs.issue_number }}"
+          echo "  - Title: ${{ steps.fetch-issue.outputs.title }}"
+          echo "  - State: ${{ steps.fetch-status.outputs.status }}"
+          echo "  - Snapshot: ${{ steps.build-adoc.outputs.snapshot_file }}"
+          echo "  - Comments: ${{ steps.fetch-comments.outputs.comments_count }}"
+          echo ""
+          echo "📁 Vault Location:"
+          echo "  in_basket/CAPAs/CAPA-${{ steps.fetch-issue.outputs.issue_number }}/"
+          echo ""
+          echo "⏰ Timestamp: ${{ steps.build-adoc.outputs.snapshot_time }}"
+          echo ""
+          echo "🔐 Status: IMMUTABLE (archived in vault)"
+
+  # Job 2: Notify PM of completion (optional, for high-risk CAPAs)
+  notify-completion:
+    name: Notify stakeholders
+    runs-on: ubuntu-latest
+    needs: capture-snapshot
+    if: always()
+    steps:
+      - name: Determine notification recipients
+        id: recipients
+        run: |
+          # PM always notified
+          echo "pm_email=${{ secrets.PM_EMAIL }}" >> $GITHUB_OUTPUT
+
+          # ENG_MGR notified if high-risk
+          echo "eng_mgr_email=${{ secrets.ENG_MGR_EMAIL }}" >> $GITHUB_OUTPUT
+
+      - name: Send notification (placeholder)
+        run: |
+          echo "📧 Notifications would be sent to:"
+          echo "  - PM: ${{ steps.recipients.outputs.pm_email }}"
+          echo "  - ENG_MGR: ${{ steps.recipients.outputs.eng_mgr_email }}"
+          echo ""
+          echo "Note: Actual email integration requires additional setup"
+          echo "GitHub notifications are automatic"

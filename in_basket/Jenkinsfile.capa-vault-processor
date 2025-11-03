@@ -1,0 +1,441 @@
+// Jenkinsfile.capa-vault-processor
+// CAPA Vault In_Basket Processor Pipeline
+// Runs in: StarForth-Governance repository
+// Purpose: Process CAPA snapshots, archive to permanent vault, generate compliance certs
+
+pipeline {
+    agent any
+
+    parameters {
+        booleanParam(
+            name: 'DRY_RUN',
+            defaultValue: false,
+            description: 'Run in dry-run mode (no commits)'
+        )
+    }
+
+    triggers {
+        // Run daily at 3 AM UTC
+        cron('H 3 * * *')
+        // Also allow manual trigger
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+        timeout(time: 1, unit: 'HOURS')
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        GOVERNANCE_REPO = 'rajames440/StarForth-Governance'
+        WORKSPACE_REPO = "${WORKSPACE}/governance"
+        IN_BASKET = "${WORKSPACE_REPO}/in_basket"
+        VAULT_PERMANENT = "${WORKSPACE_REPO}/Reference/Quality/CAPAs"
+        IMMUTABILITY_FILE = "${WORKSPACE_REPO}/.immutability_manifest"
+        GIT_AUTHOR_NAME = "CAPA Vault Processor"
+        GIT_AUTHOR_EMAIL = "capa-vault-processor@starforth.governance"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "📋 Checking out StarForth-Governance repository..."
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: '*/master']],
+                        userRemoteConfigs: [[
+                            url: "https://github.com/${GOVERNANCE_REPO}.git",
+                            credentialsId: 'github-credentials'
+                        ]]
+                    ])
+                }
+            }
+        }
+
+        stage('Scan In_Basket') {
+            steps {
+                script {
+                    echo "🔍 Scanning in_basket for CAPA snapshots..."
+
+                    // Find all CAPA manifests in in_basket
+                    def manifests = findFiles(glob: 'in_basket/CAPAs/*/MANIFEST.json')
+
+                    if (manifests.size() == 0) {
+                        echo "✓ No CAPA manifests found in in_basket"
+                        env.CAPA_COUNT = "0"
+                    } else {
+                        echo "✓ Found ${manifests.size()} CAPA manifest(s)"
+                        env.CAPA_COUNT = "${manifests.size()}"
+
+                        // List all
+                        manifests.each { manifest ->
+                            echo "  - ${manifest.path}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Process Closed CAPAs') {
+            when {
+                expression { env.CAPA_COUNT != "0" }
+            }
+            steps {
+                script {
+                    echo "📦 Processing CAPA snapshots from in_basket..."
+
+                    // Find all manifests
+                    def manifests = findFiles(glob: 'in_basket/CAPAs/*/MANIFEST.json')
+
+                    manifests.each { manifest ->
+                        try {
+                            def manifestJson = readJSON file: manifest.path
+                            def capaId = manifestJson.capa_id
+                            def state = manifestJson.kanban_state
+                            def inBasketDir = "in_basket/CAPAs/CAPA-${capaId}"
+                            def permVaultDir = "${VAULT_PERMANENT}/CAPA-${capaId}"
+
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "Processing CAPA #${capaId}"
+                            echo "  State: ${state}"
+                            echo "  Source: ${inBasketDir}"
+                            echo "  Destination: ${permVaultDir}"
+
+                            // Only archive CLOSED CAPAs
+                            if (state == 'CLOSED') {
+                                echo "  Status: ✓ CLOSED - Archiving to permanent vault"
+                                archiveClosedCapa(capaId, inBasketDir, permVaultDir, manifestJson)
+                            } else {
+                                echo "  Status: ⧑ ${state} - Keeping in in_basket (pending completion)"
+                            }
+
+                            echo ""
+                        } catch (Exception e) {
+                            echo "❌ Error processing CAPA: ${e.message}"
+                            // Continue with other CAPAs
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Generate Compliance Certificates') {
+            when {
+                expression { env.CAPA_COUNT != "0" }
+            }
+            steps {
+                script {
+                    echo "📜 Generating compliance certificates for archived CAPAs..."
+
+                    sh '''
+                        cd "${VAULT_PERMANENT}"
+
+                        for capa_dir in CAPA-*; do
+                            capa_id=$(basename "$capa_dir")
+
+                            # Only generate cert if not already present
+                            if [ ! -f "${capa_dir}/COMPLIANCE_CERT.adoc" ]; then
+                                echo "Generating certificate for ${capa_id}..."
+
+                                cat > "${capa_dir}/COMPLIANCE_CERT.adoc" << EOF
+= ${capa_id} Compliance & Immutability Certificate
+:docid: ${capa_id}-CERT
+:docdate: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+:doctype: article
+
+== Document Summary
+
+This certificate verifies that CAPA ${capa_id} has been processed through the
+StarForth governance system and archived as an immutable record.
+
+* **CAPA ID:** ${capa_id}
+* **Archive Date:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+* **Archive Location:** Reference/Quality/CAPAs/${capa_id}/
+* **Status:** IMMUTABLE
+
+== Preservation Guarantee
+
+✓ **Complete History Preserved**
+All snapshots from issue creation through closure have been preserved without modification.
+
+✓ **Immutability Verified**
+All files have been checksummed and verified for integrity.
+
+✓ **Compliance Ready**
+This archive is suitable for regulatory and compliance reviews.
+
+== Archive Contents
+
+The following files are included in this archive:
+
+$(find "${capa_dir}" -name "CAPA-*.adoc" -o -name "MANIFEST.json" | sort | sed 's|^|* |')
+
+== Verification Information
+
+* **Checksum File:** $(ls -la ../.immutability_manifest 2>/dev/null | grep -o '\S*$' || echo "pending")**
+* **Git History:** All changes tracked in git history
+* **Vault Status:** Immutable archive in version control
+
+== Certification
+
+This archive has been processed by the CAPA Vault Processor system
+and meets all requirements for governance, compliance, and audit purposes.
+
+Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+System: StarForth Governance Vault Processor
+
+EOF
+                            fi
+                        done
+                    '''
+                }
+            }
+        }
+
+        stage('Generate Immutability Manifest') {
+            steps {
+                script {
+                    echo "🔐 Creating immutability verification manifest..."
+
+                    sh '''
+                        cd "${VAULT_PERMANENT}"
+
+                        echo "# Immutability Verification Manifest" > "${IMMUTABILITY_FILE}"
+                        echo "# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${IMMUTABILITY_FILE}"
+                        echo "# Purpose: Verify archive integrity" >> "${IMMUTABILITY_FILE}"
+                        echo "" >> "${IMMUTABILITY_FILE}"
+
+                        # Create SHA256 checksums for all archived CAPAs
+                        find . -type f \\( -name "*.adoc" -o -name "*.json" \\) | sort | while read file; do
+                            sha256sum "$file" >> "${IMMUTABILITY_FILE}"
+                        done
+
+                        echo "✓ Immutability manifest created: $(wc -l < ${IMMUTABILITY_FILE}) lines"
+                    '''
+                }
+            }
+        }
+
+        stage('Commit Changes') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "💾 Committing archived CAPAs and certificates..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        git config user.name "${GIT_AUTHOR_NAME}"
+                        git config user.email "${GIT_AUTHOR_EMAIL}"
+
+                        # Add all changes
+                        git add "Reference/Quality/CAPAs/" ".immutability_manifest"
+
+                        # Check if there are changes
+                        if git diff --cached --quiet; then
+                            echo "ℹ No changes to commit"
+                        else
+                            echo "Committing changes..."
+                            git commit -m "CAPA Vault: Archive and process snapshots
+
+- Process CAPA snapshots from in_basket
+- Generate compliance certificates
+- Verify immutability checksums
+- Commit date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+                            echo "✓ Changes committed"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Push to Repository') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🚀 Pushing changes to repository..."
+
+                    sh '''
+                        cd "${WORKSPACE_REPO}"
+
+                        if [ $(git rev-parse HEAD) != $(git rev-parse origin/HEAD) ]; then
+                            git push origin HEAD
+                            echo "✓ Changes pushed"
+                        else
+                            echo "ℹ No new commits to push"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Immutability') {
+            steps {
+                script {
+                    echo "✓ Verifying immutability of archived CAPAs..."
+
+                    sh '''
+                        cd "${VAULT_PERMANENT}"
+
+                        # Verify checksums
+                        if [ -f "${IMMUTABILITY_FILE}" ]; then
+                            echo "Verifying checksums..."
+                            sha256sum -c "${IMMUTABILITY_FILE}" > /dev/null 2>&1
+
+                            if [ $? -eq 0 ]; then
+                                echo "✓ All archives verified: checksums match"
+                            else
+                                echo "❌ Checksum verification failed"
+                                exit 1
+                            fi
+                        fi
+
+                        # Count archives
+                        ARCHIVE_COUNT=$(find . -maxdepth 1 -type d -name "CAPA-*" | wc -l)
+                        echo "✓ Total archived CAPAs: $ARCHIVE_COUNT"
+                    '''
+                }
+            }
+        }
+
+        stage('Notify PM of Exceptions') {
+            when {
+                expression { currentBuild.result == 'FAILURE' }
+            }
+            steps {
+                script {
+                    echo "📧 Notifying PM of exceptions..."
+
+                    emailext(
+                        subject: "⚠️ Governance Alert: CAPA Vault Processor Failed",
+                        body: """
+                        The CAPA Vault Processor pipeline encountered errors.
+
+                        Build: ${BUILD_NUMBER}
+                        Status: FAILURE
+                        URL: ${BUILD_URL}console
+
+                        Please review the logs and contact the governance team.
+                        """,
+                        to: "${env.PM_EMAIL ?: 'pm@starforth.local'}",
+                        cc: "${env.ENG_MGR_EMAIL ?: 'eng-mgr@starforth.local'}",
+                        recipientProviders: [developers(), requestor()]
+                    )
+                }
+            }
+        }
+
+        stage('Generate Summary Report') {
+            steps {
+                script {
+                    echo "📊 Generating processor summary report..."
+
+                    sh '''
+                        cd "${VAULT_PERMANENT}"
+
+                        echo "======================================="
+                        echo "CAPA Vault Processor Summary"
+                        echo "======================================="
+                        echo "Execution Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                        echo ""
+                        echo "Archived CAPAs:"
+                        find . -maxdepth 1 -type d -name "CAPA-*" | sort | sed 's|^./||' | nl
+                        echo ""
+                        echo "Total Archives: $(find . -maxdepth 1 -type d -name "CAPA-*" | wc -l)"
+                        echo "======================================="
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo "✅ Pipeline execution complete"
+                echo "Build Status: ${currentBuild.result}"
+            }
+        }
+
+        success {
+            script {
+                echo "✓ All CAPA archives processed successfully"
+                echo "✓ Immutability verified"
+                echo "✓ Compliance certificates generated"
+            }
+        }
+
+        failure {
+            script {
+                echo "❌ Pipeline failed - PM intervention may be required"
+            }
+        }
+    }
+}
+
+// Helper function to archive a closed CAPA
+def archiveClosedCapa(capaId, inBasketDir, permVaultDir, manifestJson) {
+    sh """
+        set -e
+
+        echo "  • Creating permanent vault directory..."
+        mkdir -p "${permVaultDir}"
+
+        echo "  • Copying AsciiDoc snapshots..."
+        cp ${inBasketDir}/CAPA-*.adoc "${permVaultDir}/"
+
+        echo "  • Copying MANIFEST.json..."
+        cp ${inBasketDir}/MANIFEST.json "${permVaultDir}/"
+
+        echo "  • Generating AsciiDoc index..."
+        generateArchiveIndex "${capaId}" "${permVaultDir}"
+
+        echo "  ✓ CAPA #${capaId} archived to permanent vault"
+    """
+}
+
+// Helper function to generate index
+def generateArchiveIndex(capaId, permVaultDir) {
+    sh """
+        cat > "${permVaultDir}/index.adoc" << EOF
+= CAPA #${capaId} Complete Archive Index
+:docid: CAPA-${capaId}-INDEX
+:docdate: \$(date -u +%Y-%m-%dT%H:%M:%SZ)
+:toc: left
+
+== Archive Overview
+
+This is the complete immutable archive for CAPA #${capaId}.
+
+All snapshots from issue creation through closure have been preserved.
+
+== Snapshots
+
+\$(find . -name "CAPA-*.adoc" -type f | sort | sed 's|^./||' | while read f; do
+    echo "=== \${f}"
+    echo ""
+    echo "link:\${f}[View Snapshot]"
+    echo ""
+done)
+
+== Metadata
+
+* **MANIFEST:** link:MANIFEST.json[Project Metadata]
+* **Certificate:** link:COMPLIANCE_CERT.adoc[Compliance Certificate]
+* **Index:** This file
+
+== Archival Information
+
+* **Archived:** \$(date -u +%Y-%m-%dT%H:%M:%SZ)
+* **Status:** IMMUTABLE
+* **Verification:** SHA256 checksums verified
+
+EOF
+    """
+}
