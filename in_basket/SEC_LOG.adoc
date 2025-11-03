@@ -1,0 +1,45 @@
+= Security Event Log
+:revdate: 2025-11-03
+:toc:
+:toc-placement: preamble
+
+== Overview
+
+This document is the authoritative audit trail for all security events, governance violations, and unauthorized access attempts related to the StarForth governance system.
+
+**Last Updated:** {revdate}
+
+== Event Classifications
+
+* **Unauthorized Backlog Access** - Attempt to bypass governance controls for backlog entry
+* **Governance Violation** - Violation of documented governance procedures
+* **Policy Violation** - Breach of governance policy or procedure
+* **Audit Finding** - Issue identified during governance audit
+
+== Unauthorized Access Attempts
+
+|===
+| Timestamp | Event Type | User | Reference | Description | Severity | Action Taken
+
+|===
+
+== Notes
+
+* Each entry is immutable once created
+* All timestamps are in UTC (Zulu Time)
+* Severity levels: CRITICAL, MAJOR, MINOR, LOW
+* Reference format: Issue #NNN or IR-YYYY-MM-DD-HHmmss
+* Action Taken should reference created IR (Incident Report) issue number
+
+== Governance Reference
+
+* Rule 1: Only approved workflows or owner may add items to development backlog
+* Approved entry methods:
+  - ECO (Engineering Change Order) - Always routes to backlog
+  - CAPA (Corrective/Preventive Action) - PM decides (backlog vs vault)
+  - Manual addition by owner only
+* Violations trigger:
+  - Warning comment on original issue
+  - Incident Report (IR) creation
+  - PM notification
+  - Audit log entry (this document)
