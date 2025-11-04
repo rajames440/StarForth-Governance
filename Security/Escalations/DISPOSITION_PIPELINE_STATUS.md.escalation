@@ -1,0 +1,9 @@
+# Escalation Tracking: DISPOSITION_PIPELINE_STATUS.md
+title: DISPOSITION_PIPELINE_STATUS
+type: UNKNOWN
+routed_at: 2025-11-04T01:22:22Z
+day1_reminder: 2025-11-05T01:22:33Z
+day3_escalate_pm: 2025-11-07T01:22:33Z
+signers_required:
+  - rajames440
+status: PENDING_SIGNATURES
