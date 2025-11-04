@@ -1,0 +1,358 @@
+= in_basket Intake Procedures
+:doctype: article
+:toc:
+:toc-placement: preamble
+:sectnums:
+
+== Overview
+
+The **in_basket** directory serves as the **gating mechanism** for all materials entering the [VAULT].
+
+**Core Principle:** Everything entering the formal record (Reference, Validation, CAPA, ECR, ECO directories) **MUST** flow through in_basket first.
+
+This ensures:
+- Complete audit trail of all governance decisions
+- Peer review before formal record status
+- Version control of disposition history
+- Traceability for compliance verification
+
+---
+
+== Intake Pathways
+
+=== 1. Defects
+**Purpose:** Bug reports, test failures, system anomalies
+
+**Submission Format:**
+- Issue number (if from GitHub)
+- Description of defect
+- Reproduction steps (if applicable)
+- Impact assessment
+- Affected component/module
+
+**Disposition:**
+- **Root Cause Analysis** → moves to Validation/SHARED/DEFECT_LOG
+- **Corrective Action** → initiates CAPA_Submissions
+- **Duplicate/Invalid** → archived in in_basket with notation
+
+**SLA:** 5 business days for triage
+
+---
+
+=== 2. Test_Results
+**Purpose:** New validation results, test execution reports, coverage data
+
+**Submission Format:**
+- Test harness output
+- Platform/configuration tested
+- Date and commit hash
+- Pass/fail summary
+- Metrics (coverage %, execution time, etc.)
+
+**Disposition:**
+- **Passing** → evaluated for Validation/TIER_* incorporation
+- **Failing** → escalated to Defects pathway
+- **Regression** → triggers root cause analysis and CAPA
+
+**SLA:** 3 business days for evaluation
+
+---
+
+=== 3. FMEA_Submissions
+**Purpose:** Failure Mode & Effects Analysis results, risk assessments
+
+**Submission Format:**
+- FMEA artifact (completed form or structured document)
+- Severity/Occurrence/Detection ratings
+- Risk Priority Number (RPN)
+- Proposed mitigations
+- Reviewer signatures
+
+**Disposition:**
+- **Approved** → moves to Reference/Processes (adds to FMEA_PROCESS guidance)
+- **Requires Action** → initiates ECR or CAPA
+- **Revision Needed** → returns to submitter with feedback
+
+**SLA:** 10 business days for review/approval
+
+---
+
+=== 4. ECR_Drafts
+**Purpose:** Engineering Change Request drafts awaiting technical review
+
+**Submission Format:**
+- ECR ID (auto-assigned on intake)
+- Change description
+- Rationale/justification
+- Impact analysis
+- Implementation plan
+- Risk assessment
+
+**Disposition:**
+- **Approved** → moves to Reference/Processes/CAPA_ECR_Tracking
+- **Conditional** → returns for revision with specific requirements
+- **Rejected** → archived with disposition rationale
+
+**SLA:** 7 business days for technical review
+
+---
+
+=== 5. ECO_Submissions
+**Purpose:** Engineering Change Order approvals, change implementation records
+
+**Submission Format:**
+- ECO ID (linked to original ECR)
+- Implementation status
+- Verification results
+- Sign-offs (QA, PM, Architecture)
+- Effective date
+
+**Disposition:**
+- **Approved** → moves to Reference/Processes as executed ECO
+- **On Hold** → documented reason, re-evaluation date set
+- **Cancelled** → archived with disposition
+
+**SLA:** 5 business days for approval chain
+
+---
+
+=== 6. Security_Findings
+**Purpose:** Vulnerability reports, security assessments, threat analysis results
+
+**Submission Format:**
+- Vulnerability ID (or CVE if external)
+- Severity (critical/high/medium/low)
+- Affected component(s)
+- Description and impact
+- Recommended mitigation
+- Disclosure timeline (if applicable)
+
+**Disposition:**
+- **Critical** → immediate escalation, may initiate emergency ECR
+- **High/Medium** → evaluated for next release cycle ECR
+- **Low** → backlog for consideration
+- **Non-Issue** → documented with reasoning
+
+**SLA:** 24 hours for severity triage, 5 days for disposition plan
+
+---
+
+=== 7. Design_Specifications
+**Purpose:** Architectural designs, interface specifications, algorithm documentation
+
+**Submission Format:**
+- Design title and scope
+- Problem statement
+- Proposed solution with rationale
+- Trade-offs analysis
+- Implementation approach
+- Acceptance criteria
+
+**Disposition:**
+- **Approved** → moves to Reference/Foundation or Reference/Processes
+- **Approved with Revisions** → returns for updates before formal status
+- **Rejected** → archived with decision rationale
+- **Under Review** → stays in in_basket pending subject matter expert review
+
+**SLA:** 10 business days for architectural review
+
+---
+
+=== 8. Audit_Findings
+**Purpose:** Audit reports, compliance findings, assessment results
+
+**Submission Format:**
+- Audit scope and date
+- Finding ID
+- Severity/Category
+- Description
+- Root cause (if identified)
+- Proposed corrective action
+- Auditor information
+
+**Disposition:**
+- **Finding** → initiates CAPA process (moves to CAPA_Submissions)
+- **Observation** → documented in Validation/SHARED for trending
+- **Non-Conformance** → escalated for immediate action
+- **Satisfactory** → archived as audit evidence
+
+**SLA:** 3 business days for severity determination
+
+---
+
+=== 9. Formal_Verification
+**Purpose:** Isabelle/HOL proofs, theorem results, verification artifacts
+
+**Submission Format:**
+- Proof artifact (.thy file or HOL export)
+- Theorem statement
+- Proof status (complete/in-progress/abandoned)
+- Coverage mapping (which FORTH-79 clauses)
+- Verification environment (Isabelle version, etc.)
+- Review/peer sign-off
+
+**Disposition:**
+- **Verified** → moves to Reference/FormalVerification
+- **In Progress** → stays in in_basket with status tracking
+- **Abandoned** → archived with decision rationale
+- **Requires Revision** → returns to proof author
+
+**SLA:** 14 business days for peer review (complex proofs may extend)
+
+---
+
+=== 10. Compliance_Evidence
+**Purpose:** Standards compliance documentation, conformance artifacts, certification materials
+
+**Submission Format:**
+- Standard/framework (ISO, IEEE, etc.)
+- Evidence artifact
+- Mapping to requirement
+- Date of evidence collection
+- Source/authority
+
+**Disposition:**
+- **Accepted** → filed in Reference/Processes or Validation tiers as appropriate
+- **Requires Supplementation** → specific additional evidence requested
+- **Not Applicable** → documented with justification
+- **Rejected** → archived with reasoning
+
+**SLA:** 7 business days for evaluation
+
+---
+
+=== 11. Performance_Data
+**Purpose:** Benchmarks, performance metrics, baseline measurements, profiling results
+
+**Submission Format:**
+- Test description
+- Platform/configuration
+- Metrics (throughput, latency, memory, CPU, etc.)
+- Baseline for comparison
+- Date and commit hash
+- Methodology/tool documentation
+
+**Disposition:**
+- **Acceptable** → filed in Validation tiers as baseline or comparison
+- **Degradation Detected** → triggers investigation and possible ECR/CAPA
+- **Improvement Opportunity** → backlog for enhancement evaluation
+- **Baseline Update** → updates Reference/Foundation metrics
+
+**SLA:** 5 business days for analysis
+
+---
+
+=== 12. Incident_Reports
+**Purpose:** System incidents, production issues, environmental/external problems
+
+**Submission Format:**
+- Incident ID and date/time
+- Severity (critical/major/minor)
+- System affected
+- Symptoms/observable behavior
+- Impact assessment
+- Root cause analysis (if completed)
+- Workaround/mitigation (if applicable)
+
+**Disposition:**
+- **Defect** → moves to Defects pathway for triage
+- **Environmental** → documented for audit trail, no action needed
+- **User Error** → documented with resolution/training recommendation
+- **Design Limitation** → initiates design review or ECR
+
+**SLA:** 24 hours for initial triage, 5 days for disposition
+
+---
+
+== Intake Process Workflow
+
+```
+1. SUBMISSION (submitter)
+   └─ Place artifact in appropriate in_basket/<Pathway>/ directory
+   └─ Create intake summary (title, date, brief description)
+
+2. TRIAGE (governance team - 24-48 hours)
+   └─ Verify completeness
+   └─ Assign ID if not already assigned
+   └─ Route to appropriate reviewer/approver
+   └─ Document in intake log
+
+3. REVIEW (subject matter expert - per SLA)
+   └─ Technical/compliance evaluation
+   └─ Decision: Approve / Conditional / Reject / Revision Needed
+   └─ Document findings and rationale
+
+4. DISPOSITION (governance owner - within 2 business days after review)
+   └─ Approve: Move to target [VAULT] directory with version metadata
+   └─ Conditional: Return to submitter with requirements (stays in in_basket)
+   └─ Reject: Archive in in_basket with decision documentation
+   └─ Revise: Return to submitter with specific feedback
+
+5. ARCHIVE (governance team - monthly)
+   └─ Dispositioned items moved out of in_basket (to target directory)
+   └─ Rejected/archived items compressed and dated
+   └─ Intake log updated with final disposition
+```
+
+---
+
+== Intake Log Template
+
+Each pathway maintains an `INTAKE_LOG.adoc` file tracking:
+
+[cols="1,2,2,2,2"]
+|===
+|Date Received|Submission ID|Title|Reviewer|Disposition
+|2025-11-02|DEFECT-001|Stack overflow in DUP word|QA Lead|APPROVED → Defects/DEFECT-001.adoc
+|2025-11-02|TEST-001|Coverage report Nov 2025|Test Lead|APPROVED → Validation/TIER_II_QUALITY/TEST_RESULTS
+|2025-11-01|ECR-001|Optimize dictionary lookup|Arch Review|CONDITIONAL → Revision needed by 2025-11-08
+|===
+
+---
+
+== Gating Rules (Critical)
+
+**RULE 1:** No document moves from in_basket to any [VAULT] directory without:
+- Documented review by qualified reviewer
+- Explicit disposition decision
+- Metadata (date, reviewer, decision rationale)
+
+**RULE 2:** Rejected items stay in in_basket **indefinitely** as audit trail
+- Provides historical record of governance decisions
+- Prevents "loss" of rejected proposals
+- Supports audit queries like "what was rejected in 2025?"
+
+**RULE 3:** in_basket is never "cleaned up" by deleting items
+- Items are organized, archived, or moved to permanent locations
+- But audit trail of all submissions is preserved in git history
+
+**RULE 4:** Every in_basket submission gets unique ID
+- Format: `<PATHWAY>-<SEQUENCE>` (e.g., DEFECT-0042, ECR-0157)
+- ID persists even if disposition is rejection
+- Enables audit trail queries
+
+---
+
+== Compliance Notes
+
+- All intake activities logged in git (via commits and file history)
+- Audit trail complete: submitter → reviewer → disposition → movement
+- No items bypass in_basket (enforced by procedure and peer review)
+- Monthly intake summaries support governance reporting
+- SLAs enforced by project management/process owner
+
+---
+
+== References
+
+- **CAPA_PROCESS.adoc** - Details when Defects escalate to CAPA
+- **ECR_PROCESS.adoc** - Full ECR lifecycle (starts in ECR_Drafts)
+- **ECO_PROCESS.adoc** - Full ECO lifecycle (starts in ECO_Submissions)
+- **GOVERNANCE.md** - Overall governance framework
+== Signatures
+
+|===
+| Signer | Status | Date | Signature
+
+| rajames440 | Pending |  |
+|===
