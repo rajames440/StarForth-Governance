@@ -449,7 +449,7 @@ SIGBLOCK
                                 # Create issue with signer mentions
                                 ISSUE_BODY='Document pending signature collection.
 
-**Document:** `${doc_name}`
+**Document:** \`${doc_name}\`
 **Type:** ${DOC_TYPE}
 **Title:** ${DOC_TITLE}
 
@@ -457,9 +457,9 @@ SIGBLOCK
 $(echo "${SIGNERS}" | sed '"'"'s/^/- @/'"'"' | paste -sd '"'"''"'"' -)
 
 **Action Required:**
-1. Review document in `Pending/${DOC_TYPE}/${doc_name}`
-2. Sign with GPG: `gpg --detach-sign --armor ${doc_name}`
-3. Create detached signature: `${doc_name}.[your-username].asc`
+1. Review document in \`Pending/${DOC_TYPE}/${doc_name}\`
+2. Sign with GPG: \`gpg --detach-sign --armor ${doc_name}\`
+3. Create detached signature: \`${doc_name}.[your-username].asc\`
 4. Commit to repository or notify pipeline
 
 **Timeline:**
