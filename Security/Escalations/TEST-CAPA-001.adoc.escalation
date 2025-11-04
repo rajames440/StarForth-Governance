@@ -1,0 +1,9 @@
+# Escalation Tracking: TEST-CAPA-001.adoc
+title: TEST-CAPA-001
+type: CAPA
+routed_at: 2025-11-04T14:11:17Z
+day1_reminder: 2025-11-05T14:11:56Z
+day3_escalate_pm: 2025-11-07T14:11:56Z
+signers_required:
+  - rajames440
+status: PENDING_SIGNATURES
