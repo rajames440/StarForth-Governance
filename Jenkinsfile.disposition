@@ -24,7 +24,6 @@ pipeline {
     environment {
         GOVERNANCE_REPO = 'rajames440/StarForth-Governance'
         WORKSPACE_REPO = "${WORKSPACE}"
-        TIMESTAMP = new Date().format('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'')
     }
 
     stages {
@@ -169,8 +168,8 @@ pipeline {
 
                                 // Read and parse metadata
                                 String metadataContent = readFile(metadataPath)
-                                def metadata = new groovy.json.JsonSlurper().parseText(metadataContent)
-                                String docType = metadata.get('type', 'UNKNOWN')
+                                Map metadata = groovy.json.JsonSlurper.newInstance().parseText(metadataContent) as Map
+                                String docType = metadata.get('type', 'UNKNOWN') ?: 'UNKNOWN'
 
                                 // Create pending type directory
                                 sh "mkdir -p \"\${WORKSPACE}/Pending/${docType}\""
@@ -194,7 +193,7 @@ pipeline {
                                 String hintsPath = "/tmp/disposition-hints/${docName}.hints"
                                 if (fileExists(hintsPath)) {
                                     String hintsContent = readFile(hintsPath)
-                                    def hints = new groovy.json.JsonSlurper().parseText(hintsContent)
+                                    Map hints = groovy.json.JsonSlurper.newInstance().parseText(hintsContent) as Map
 
                                     if (hints.hold_if_found) {
                                         sh "mkdir -p \"\${WORKSPACE}/Hold/${docType}\""
@@ -235,11 +234,15 @@ pipeline {
                         git config user.name "Disposition Pipeline"
                         git config user.email "disposition@starforth.governance"
                         BRANCH_NAME="doc/disposition-$(date +%s)"
+                        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
                         git checkout -b "${BRANCH_NAME}"
                         echo "${BRANCH_NAME}" > /tmp/branch_name
+                        echo "${TIMESTAMP}" > /tmp/timestamp
                     '''
                     env.BRANCH_NAME = readFile('/tmp/branch_name').trim()
+                    env.TIMESTAMP = readFile('/tmp/timestamp').trim()
                     echo "✓ Branch: ${env.BRANCH_NAME}"
+                    echo "✓ Timestamp: ${env.TIMESTAMP}"
                 }
             }
         }
@@ -292,10 +295,10 @@ pipeline {
 
                         metadataList.each { String metadataPath ->
                             String metadataContent = readFile(metadataPath)
-                            def metadata = new groovy.json.JsonSlurper().parseText(metadataContent)
+                            Map metadata = groovy.json.JsonSlurper.newInstance().parseText(metadataContent) as Map
                             String docName = metadataPath.replaceAll('.*/([^/]+)\\.json$', '$1')
-                            String docType = metadata.type
-                            String docTitle = metadata.title
+                            String docType = metadata.type ?: 'UNKNOWN'
+                            String docTitle = metadata.title ?: docName
                             List signers = metadata.required_signers ?: []
 
                             if (signers.isEmpty()) return
@@ -320,7 +323,6 @@ pipeline {
 - Day 1: Reminder
 - Day 3: PM escalation
 
-Created: ${env.TIMESTAMP}
 Branch: ${env.BRANCH_NAME}"""
 
                             sh """
@@ -360,23 +362,33 @@ Branch: ${env.BRANCH_NAME}"""
 
                         metadataList.each { String metadataPath ->
                             String metadataContent = readFile(metadataPath)
-                            def metadata = new groovy.json.JsonSlurper().parseText(metadataContent)
+                            Map metadata = groovy.json.JsonSlurper.newInstance().parseText(metadataContent) as Map
                             String docName = metadataPath.replaceAll('.*/([^/]+)\\.json$', '$1')
-                            String docType = metadata.type
-                            String docTitle = metadata.title
+                            String docType = metadata.type ?: 'UNKNOWN'
+                            String docTitle = metadata.title ?: docName
                             List signers = metadata.required_signers ?: []
 
-                            // Calculate dates
-                            Date now = new Date()
-                            Date day1 = new Date(now.time + (1000 * 60 * 60 * 24))
-                            Date day3 = new Date(now.time + (1000 * 60 * 60 * 24 * 3))
+                            // Calculate timestamps in shell (safer than new Date())
+                            String timestamps = sh(
+                                script: '''
+                                    NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                                    DAY1=$(date -u -d "+1 day" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v+1d +"%Y-%m-%dT%H:%M:%SZ")
+                                    DAY3=$(date -u -d "+3 days" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v+3d +"%Y-%m-%dT%H:%M:%SZ")
+                                    echo "${DAY1}|${DAY3}"
+                                ''',
+                                returnStdout: true
+                            ).trim()
+
+                            List dates = timestamps.split('\\|')
+                            String day1Reminder = dates.size() > 0 ? dates[0] : ''
+                            String day3Escalate = dates.size() > 1 ? dates[1] : ''
 
                             String escalationContent = """# Escalation Tracking: ${docName}
 type: ${docType}
 title: ${docTitle}
 routed_at: ${env.TIMESTAMP}
-day1_reminder: ${day1.format('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'')}
-day3_escalate_pm: ${day3.format('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'')}
+day1_reminder: ${day1Reminder}
+day3_escalate_pm: ${day3Escalate}
 signers_required:
 ${signers.collect { "  - ${it}" }.join('\n')}
 status: PENDING_SIGNATURES
