@@ -446,33 +446,44 @@ SIGBLOCK
                             if command -v gh &> /dev/null; then
                                 echo "  → Creating GitHub issue notification..."
 
-                                # Build signer list
+                                # Build signer list for the issue
                                 SIGNERS_LIST=$(echo "${SIGNERS}" | sed 's/^/- @/')
 
-                                # Create issue body using heredoc (no Groovy escaping issues)
-                                read -r -d '' ISSUE_BODY <<BODY_EOF || true
+                                # Write issue body to temp file (pure bash, no Groovy parsing)
+                                cat > /tmp/issue_body.txt << 'ISSUE_EOF'
 Document pending signature collection.
 
-**Document:** \`${doc_name}\`
-**Type:** ${DOC_TYPE}
-**Title:** ${DOC_TITLE}
+**Document:** `DOCUMENT_NAME_PLACEHOLDER`
+**Type:** DOCUMENT_TYPE_PLACEHOLDER
+**Title:** DOCUMENT_TITLE_PLACEHOLDER
 
 **Required Signers:**
-${SIGNERS_LIST}
+SIGNERS_PLACEHOLDER
 
 **Action Required:**
-1. Review document in \`Pending/${DOC_TYPE}/${doc_name}\`
-2. Sign with GPG: \`gpg --detach-sign --armor ${doc_name}\`
-3. Create detached signature: \`${doc_name}.[your-username].asc\`
+1. Review document in `Pending/DOCUMENT_TYPE_PLACEHOLDER/DOCUMENT_NAME_PLACEHOLDER`
+2. Sign with GPG: `gpg --detach-sign --armor DOCUMENT_NAME_PLACEHOLDER`
+3. Create detached signature: `DOCUMENT_NAME_PLACEHOLDER.[your-username].asc`
 4. Commit to repository or notify pipeline
 
 **Timeline:**
 - Day 1: Reminder notification
 - Day 3: PM escalation if not signed
 
-Created: ${TIMESTAMP}
-Branch: ${BRANCH_NAME}
-BODY_EOF
+Created: TIMESTAMP_PLACEHOLDER
+Branch: BRANCH_PLACEHOLDER
+ISSUE_EOF
+
+                                # Replace placeholders with actual values using bash
+                                sed -i "s|DOCUMENT_NAME_PLACEHOLDER|${doc_name}|g" /tmp/issue_body.txt
+                                sed -i "s|DOCUMENT_TYPE_PLACEHOLDER|${DOC_TYPE}|g" /tmp/issue_body.txt
+                                sed -i "s|DOCUMENT_TITLE_PLACEHOLDER|${DOC_TITLE}|g" /tmp/issue_body.txt
+                                sed -i "s|SIGNERS_PLACEHOLDER|${SIGNERS_LIST}|g" /tmp/issue_body.txt
+                                sed -i "s|TIMESTAMP_PLACEHOLDER|${TIMESTAMP}|g" /tmp/issue_body.txt
+                                sed -i "s|BRANCH_PLACEHOLDER|${BRANCH_NAME}|g" /tmp/issue_body.txt
+
+                                # Read the file into a variable
+                                ISSUE_BODY=$(cat /tmp/issue_body.txt)
 
                                 gh issue create \
                                   --title "📋 Document Pending Signature: ${doc_name}" \
