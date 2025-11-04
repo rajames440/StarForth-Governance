@@ -687,7 +687,7 @@ curl -s http://localhost:8080 | head -20
 # - SCM: Git is selected
 # - Repository URL is correct
 # - Credentials are set to "github-credentials"
-# - Script Path is correct (e.g., "Jenkinsfile.disposition")
+# - Script Path is correct (e.g., "Jenkinsfile")
 # - Build Triggers are set
 ```
 

@@ -15,7 +15,7 @@ All documents submitted through in_basket should be automatically processed, cla
 == Reproduction Steps
 
 1. Place test document in `in_basket/`
-2. Trigger `Jenkinsfile.disposition` pipeline
+2. Trigger `Jenkinsfile` pipeline
 3. Verify document routes to `Pending/CAPA/`
 4. Check signature block was added
 5. Verify GitHub issue created for signers

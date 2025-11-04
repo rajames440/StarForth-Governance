@@ -851,7 +851,7 @@ Jenkins.instance.getItemByFullName('starforth-disposition').getBuilds().each {
 # Should see builds approximately every 15 minutes
 
 # 2. Check if escalation logic exists
-grep -n "escalation\|Day 3" /path/to/Jenkinsfile.disposition
+grep -n "escalation\|Day 3" /path/to/Jenkinsfile
 
 # 3. Check document path in Pending/
 # Is the document actually in Pending/[TYPE]/?

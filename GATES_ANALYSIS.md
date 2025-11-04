@@ -52,7 +52,7 @@ echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
 
 **Blocking Code:**
 ```bash
-# Line 417 in Jenkinsfile.disposition
+# Line 417 in Jenkinsfile
 echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
 # ↑ This just logs, doesn't actually notify
 ```

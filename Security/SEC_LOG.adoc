@@ -99,7 +99,7 @@ git log --format="%h %ad %s" --date=iso
 
 This log is automatically updated by:
 
-1. **Jenkinsfile.disposition** - Records routing, notification, and escalation events
+1. **Jenkinsfile** - Records routing, notification, and escalation events
 2. **Signature Verification Script** - Records signature receipt and validation
 3. **Vault Routing Script** - Records document movements to vault
 4. **Administrator Commands** - Manual entries for policy/access changes
