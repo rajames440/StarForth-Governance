@@ -32,12 +32,13 @@ pipeline {
                 script {
                     echo "📋 Checking out StarForth-Governance repository..."
                     sh '''
+                        cd "${WORKSPACE_REPO}"
                         if [ ! -d .git ]; then
-                            git clone "https://github.com/${GOVERNANCE_REPO}.git" .
+                            git init
+                            git remote add origin "https://github.com/${GOVERNANCE_REPO}.git"
                         fi
-                        git fetch origin master
-                        git checkout master
-                        git pull origin master
+                        git fetch origin master:master || git fetch origin master
+                        git checkout master || git checkout -b master
                     '''
                 }
             }
