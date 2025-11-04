@@ -4,31 +4,41 @@
 # Use lowercase for matching (pipeline does case-insensitive search)
 
 # Quality & Testing Keywords
+# Hint: Indicates document has validation/testing requirements. Route to VAL or DTA for test coverage review.
 quality_testing|validation,verified,testing,test case,pass/fail,coverage,regression,acceptance criteria,qa,quality assurance,test harness,pass all tests,fail-fast,test plan,test strategy,test automation
 
 # Governance & Compliance Keywords
+# Hint: Marks document with governance/compliance obligations. May need SEC or CER review. Escalate if non-compliant.
 governance_compliance|governance,complian,audit,tracked,documented,policy,procedure,requirement,mandate,approval,review,sign-off,authorization,regulatory,standards,control,control plan
 
 # Risk Assessment & Mitigation Keywords
+# Hint: Document identifies risks. FMEA likely. Check severity/RPN for escalation level. May need PM review.
 risk_assessment|risk assessment,risk level,mitigation,action item,risk priority,rpn,severity,detection,mitigat,risk acceptance,risk matrix
 
 # Validation & Verification Keywords
+# Hint: Document contains proof of validation/conformance. May satisfy VAL requirements. Check for impact analysis completeness.
 validation_verification|validated,verification,conformance,impact analysis,root cause,failure mode,effects analysis,hazard,safety,fault tree
 
 # Notes & Documentation Keywords
+# Hint: Document has caveats, limitations, or known issues. Flag for follow-up action items. Check TODOs for blockers.
 notes_documentation|note,caveat,assumption,limitation,known issue,workaround,todo,fixme,deprecated,follow-up,pending,outstanding,remark,addendum
 
 # Escalation & Priority Keywords
+# Hint: Document is urgent/critical. Escalate immediately. High priority routing to PM. Check deadline/SLA.
 escalation_priority|urgent,escalat,blocker,must have,deadline,sla,time-sensitive,critical path,high priority,emergency,immediate,asap
 
 # Process & Workflow Keywords
+# Hint: Document describes process or requires specific role approval (ENG_MGR, QUAL_MGR). Route to appropriate signer.
 process_workflow|workflow,process,step,stage,gate,phase,approval gate,engineering manager,quality manager,eng_mgr,qual_mgr,disposition,signature,signoff
 
 # Change & Impact Keywords
+# Hint: Document creates change with potential impact. Check for regression risk. Identify dependent documents (parent/child issues).
 change_impact|impact,affected,change,modification,update,breaking change,backward compatible,regression risk,dependent,relationship,parent issue,child issue
 
 # Status Keywords
+# Hint: Indicates document current state. DRAFT/PENDING = needs work. APPROVED/SIGNED = ready for use. ARCHIVED = reference only.
 status_keywords|draft,pending,review,approved,rejected,conditional,hold,in progress,complete,signed,verified,archived
 
 # Document Section Keywords (indicates completeness)
+# Hint: Document completeness indicator. Missing sections = return to author. All present = ready for signature/approval.
 section_keywords|problem statement,how to reproduce,expected behavior,root cause,solution,acceptance criteria,test case,mitigation,dependencies,related issues
