@@ -691,35 +691,49 @@ LOG_ENTRY
                 script {
                     echo "🚀 Pushing disposition changes to GitHub..."
 
-                    sh '''
-                        cd "${WORKSPACE_REPO}"
+                    withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                        sh '''
+                            cd "${WORKSPACE_REPO}"
 
-                        # Check if there are commits to push
-                        COMMITS=$(git rev-list origin/master..HEAD 2>/dev/null | wc -l)
+                            echo "[DEBUG] Configuring git credentials for push..."
+                            # Configure git to use the token for authentication
+                            git config credential.helper store
+                            echo "https://${GIT_USER}:${GIT_TOKEN}@github.com" > ~/.git-credentials
+                            chmod 600 ~/.git-credentials
+                            echo "[DEBUG] Git credentials configured"
 
-                        if [ "${COMMITS}" -eq 0 ]; then
-                            echo "ℹ️ No commits to push"
-                            exit 0
-                        fi
+                            # Check if there are commits to push
+                            COMMITS=$(git rev-list origin/master..HEAD 2>/dev/null | wc -l)
+                            echo "[DEBUG] Commits to push: ${COMMITS}"
 
-                        echo "Commits to push: ${COMMITS}"
-                        echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+                            if [ "${COMMITS}" -eq 0 ]; then
+                                echo "ℹ️ No commits to push"
+                                exit 0
+                            fi
 
-                        # Push feature branch to GitHub
-                        git push -u origin "${BRANCH_NAME}" 2>&1
+                            echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+                            echo "[DEBUG] Pushing branch: ${BRANCH_NAME}"
 
-                        if [ $? -eq 0 ]; then
-                            echo "✓ Branch pushed: ${BRANCH_NAME}"
-                        else
-                            echo "⚠️ Failed to push branch"
-                            exit 1
-                        fi
+                            # Push feature branch to GitHub
+                            git push -u origin "${BRANCH_NAME}" 2>&1
 
-                        # Show commits to be merged to master
-                        echo ""
-                        echo "Commits ready for master:"
-                        git log --oneline origin/master..HEAD | head -10
-                    '''
+                            if [ $? -eq 0 ]; then
+                                echo "✓ Branch pushed: ${BRANCH_NAME}"
+                            else
+                                echo "⚠️ Failed to push branch"
+                                exit 1
+                            fi
+
+                            # Show commits to be merged to master
+                            echo ""
+                            echo "Commits ready for master:"
+                            git log --oneline origin/master..HEAD | head -10
+
+                            # Clean up credentials
+                            echo "[DEBUG] Cleaning up git credentials..."
+                            rm -f ~/.git-credentials
+                        '''
+                    }
                 }
             }
         }
