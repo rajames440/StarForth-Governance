@@ -181,65 +181,109 @@ pipeline {
 
                             DOC_TYPE="UNKNOWN"
                             DOC_TITLE="${doc_name%.*}"
+                            REQUIRED_SIGNERS=""
 
                             # Try to extract type from document content
-                            if [ "${FORMAT}" = "asciidoc" ] || [ "${FORMAT}" = "markdown" ]; then
-                                # Look for metadata in document headers/content
-                                # Pattern 1: AsciiDoc with = TITLE format
-                                if grep -q "^= " "${doc_path}" 2>/dev/null; then
-                                    HEADER=$(grep "^= " "${doc_path}" | head -1 | sed 's/^= //')
-                                    echo "[DEBUG] Found AsciiDoc header: ${HEADER}"
-                                    DOC_TITLE="${HEADER}"
+                            if [ "${FORMAT}" = "markdown" ] || [ "${FORMAT}" = "asciidoc" ]; then
+                                # PATTERN 1: Look for **Document ID:** field (StarForth template format)
+                                # Example: **Document ID:** [TICKET-ID] (e.g., CAPA-2025-001, FEATURE-2025-001)
+                                if grep -q "^\*\*Document ID:\*\*" "${doc_path}" 2>/dev/null; then
+                                    DOC_ID_LINE=$(grep "^\*\*Document ID:\*\*" "${doc_path}" | head -1)
+                                    echo "[DEBUG] Found Document ID field: ${DOC_ID_LINE}"
 
-                                    # Extract type from header (e.g., "CAPA-001: Description" → CAPA)
-                                    if [[ "${HEADER}" =~ ^([A-Z]+)-[0-9]+ ]]; then
+                                    # Extract ticket ID from the field
+                                    # Look for pattern like CAPA-2025-001 in the line
+                                    if [[ "${DOC_ID_LINE}" =~ \[([A-Z]+)-([0-9]+-[0-9]+)\] ]]; then
                                         DOC_TYPE="${BASH_REMATCH[1]}"
-                                        echo "[DEBUG] Extracted type from header: ${DOC_TYPE}"
+                                        DOC_ID="${BASH_REMATCH[2]}"
+                                        DOC_TITLE="${DOC_TYPE}-${DOC_ID}"
+                                        echo "[DEBUG] Extracted type from Document ID: ${DOC_TYPE} (ID: ${DOC_ID})"
                                     fi
                                 fi
 
-                                # Pattern 2: Look for type field in metadata block or frontmatter
+                                # PATTERN 2: Look for checked checkboxes in Classification section
+                                # Example: - [x] **CAPA** (Corrective/Preventive Action)
                                 if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
-                                    # Check for YAML frontmatter or metadata markers
-                                    if grep -q "^type:" "${doc_path}" 2>/dev/null; then
-                                        DOC_TYPE=$(grep "^type:" "${doc_path}" | head -1 | sed 's/^type:[[:space:]]*//')
-                                        echo "[DEBUG] Extracted type from metadata: ${DOC_TYPE}"
+                                    # Find the Classification section and look for checked boxes
+                                    CLASSIFICATION=$(grep -A 10 "^## Classification" "${doc_path}" 2>/dev/null | grep "\[x\]" | head -1)
+                                    if [ -n "${CLASSIFICATION}" ]; then
+                                        echo "[DEBUG] Found checked classification: ${CLASSIFICATION}"
+                                        # Extract type from the checked box line
+                                        if [[ "${CLASSIFICATION}" =~ \*\*([A-Z]+)\*\* ]]; then
+                                            DOC_TYPE="${BASH_REMATCH[1]}"
+                                            echo "[DEBUG] Extracted type from Classification checkbox: ${DOC_TYPE}"
+                                        fi
                                     fi
                                 fi
 
-                                # Pattern 3: Look for governance document keywords in content
+                                # PATTERN 3: Look for **Submitted by:** field for signer info
+                                # Example: **Submitted by:** [Full Name] <[email]>
+                                SUBMITTED_BY=$(grep "^\*\*Submitted by:\*\*" "${doc_path}" 2>/dev/null | head -1 | sed 's/.*\*\*Submitted by:\*\*[[:space:]]*\[//;s/\].*//')
+                                if [ -n "${SUBMITTED_BY}" ]; then
+                                    echo "[DEBUG] Found submitter: ${SUBMITTED_BY}"
+                                    REQUIRED_SIGNERS="${SUBMITTED_BY}"
+                                fi
+
+                                # PATTERN 4: Look for main title/heading
+                                if [ "${FORMAT}" = "markdown" ]; then
+                                    # For markdown: # TITLE or **TITLE**
+                                    TITLE_LINE=$(grep "^#" "${doc_path}" 2>/dev/null | head -1 | sed 's/^#+[[:space:]]*//')
+                                    if [ -n "${TITLE_LINE}" ]; then
+                                        DOC_TITLE="${TITLE_LINE}"
+                                        echo "[DEBUG] Extracted title from heading: ${DOC_TITLE}"
+                                    fi
+                                fi
+
+                                # PATTERN 5: Fallback - look for governance keywords in content
                                 if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
-                                    if grep -qi "defect\|bug\|issue" "${doc_path}" 2>/dev/null && grep -qi "capa\|corrective" "${doc_path}" 2>/dev/null; then
-                                        DOC_TYPE="CAPA"
-                                        echo "[DEBUG] Inferred type from content: CAPA (defect/bug pattern)"
-                                    elif grep -qi "change.*request\|feature.*request" "${doc_path}" 2>/dev/null; then
+                                    if grep -qi "failure.*mode.*effects\|FMEA" "${doc_path}" 2>/dev/null; then
+                                        DOC_TYPE="FMEA"
+                                        echo "[DEBUG] Inferred type from content: FMEA"
+                                    elif grep -qi "engineering.*change.*request\|ECR" "${doc_path}" 2>/dev/null; then
                                         DOC_TYPE="ECR"
-                                        echo "[DEBUG] Inferred type from content: ECR (change request pattern)"
-                                    elif grep -qi "security.*review\|vulnerability" "${doc_path}" 2>/dev/null; then
-                                        DOC_TYPE="SEC"
-                                        echo "[DEBUG] Inferred type from content: SEC (security pattern)"
+                                        echo "[DEBUG] Inferred type from content: ECR"
+                                    elif grep -qi "engineering.*change.*order\|ECO" "${doc_path}" 2>/dev/null; then
+                                        DOC_TYPE="ECO"
+                                        echo "[DEBUG] Inferred type from content: ECO"
+                                    elif grep -qi "corrective.*preventive\|CAPA" "${doc_path}" 2>/dev/null; then
+                                        DOC_TYPE="CAPA"
+                                        echo "[DEBUG] Inferred type from content: CAPA"
                                     fi
                                 fi
                             fi
 
-                            # Fallback: Try filename pattern as last resort
+                            # FALLBACK: Try filename pattern as absolute last resort
                             if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
                                 if [[ "${doc_name}" =~ ^([A-Z]+)-[0-9]+ ]]; then
                                     DOC_TYPE="${BASH_REMATCH[1]}"
                                     echo "[DEBUG] Fallback: Extracted type from filename: ${DOC_TYPE}"
                                 else
-                                    echo "[WARN] Could not determine document type from content or filename"
+                                    echo "[WARN] Could not determine document type - continuing with UNKNOWN"
                                     DOC_TYPE="UNKNOWN"
                                 fi
                             fi
 
+                            # Default signer if none found in document
+                            if [ -z "${REQUIRED_SIGNERS}" ]; then
+                                REQUIRED_SIGNERS="rajames440"
+                                echo "[DEBUG] Using default signer: rajames440"
+                            fi
+
                             # Create metadata JSON with simple classification
                             echo "[DEBUG] Creating metadata file: /tmp/disposition-metadata/${doc_name}.json"
+
+                            # Build JSON array for signers
+                            SIGNERS_JSON="[]"
+                            if [ -n "${REQUIRED_SIGNERS}" ]; then
+                                # Convert space/comma-separated list to JSON array
+                                SIGNERS_JSON=$(echo "${REQUIRED_SIGNERS}" | tr ',' '\n' | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s . 2>/dev/null || echo "[\"${REQUIRED_SIGNERS}\"]")
+                            fi
+
                             cat > "/tmp/disposition-metadata/${doc_name}.json" << METADATA
 {
   "type": "${DOC_TYPE}",
   "title": "${DOC_TITLE}",
-  "required_signers": ["rajames440"],
+  "required_signers": ${SIGNERS_JSON},
   "format": "${FORMAT}",
   "needs_conversion": false
 }
