@@ -236,16 +236,16 @@ pipeline {
 
                                 # PATTERN 5: Fallback - look for governance keywords in content
                                 if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
-                                    if grep -qi "failure.*mode.*effects\|FMEA" "${doc_path}" 2>/dev/null; then
+                                    if grep -qi "failure.*mode.*effects\\|FMEA" "${doc_path}" 2>/dev/null; then
                                         DOC_TYPE="FMEA"
                                         echo "[DEBUG] Inferred type from content: FMEA"
-                                    elif grep -qi "engineering.*change.*request\|ECR" "${doc_path}" 2>/dev/null; then
+                                    elif grep -qi "engineering.*change.*request\\|ECR" "${doc_path}" 2>/dev/null; then
                                         DOC_TYPE="ECR"
                                         echo "[DEBUG] Inferred type from content: ECR"
-                                    elif grep -qi "engineering.*change.*order\|ECO" "${doc_path}" 2>/dev/null; then
+                                    elif grep -qi "engineering.*change.*order\\|ECO" "${doc_path}" 2>/dev/null; then
                                         DOC_TYPE="ECO"
                                         echo "[DEBUG] Inferred type from content: ECO"
-                                    elif grep -qi "corrective.*preventive\|CAPA" "${doc_path}" 2>/dev/null; then
+                                    elif grep -qi "corrective.*preventive\\|CAPA" "${doc_path}" 2>/dev/null; then
                                         DOC_TYPE="CAPA"
                                         echo "[DEBUG] Inferred type from content: CAPA"
                                     fi
