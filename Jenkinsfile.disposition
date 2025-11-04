@@ -323,7 +323,7 @@ METADATA
             }
             steps {
                 script {
-                    echo "🔍 Extracting quality & governance keywords from document content..."
+                    echo "🔍 Extracting quality & governance keywords and disposition hints..."
 
                     sh '''#!/bin/bash
                         echo "========== EXTRACT QUALITY & GOVERNANCE KEYWORDS =========="
@@ -339,6 +339,7 @@ METADATA
                         fi
 
                         echo "[DEBUG] Keywords file found: ${KEYWORDS_FILE}"
+                        mkdir -p /tmp/disposition-hints
 
                         # Process each document with keyword extraction
                         find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
@@ -356,11 +357,15 @@ METADATA
                             # Read document content (lowercased for case-insensitive matching)
                             DOC_CONTENT=$(cat "${doc_path}" | tr '[:upper:]' '[:lower:]')
 
-                            # Parse keywords file and check each category
-                            KEYWORD_FINDINGS="{\"found_keywords\": {}}"
-                            CATEGORY_FLAGS="[]"
+                            # Initialize disposition hints for this document
+                            ESCALATE="false"
+                            PM_REQUIRED="false"
+                            HOLD_IF_FOUND="false"
+                            ADDITIONAL_SIGNERS=""
+                            FOUND_CATEGORIES=""
 
-                            while IFS='|' read -r category keywords_str; do
+                            # Parse keywords file and check each category
+                            while IFS='|' read -r category keywords_str escalate_hint pm_hint hold_hint route_hint; do
                                 # Skip comments and empty lines
                                 [[ "${category}" =~ ^# ]] && continue
                                 [ -z "${category}" ] && continue
@@ -368,7 +373,7 @@ METADATA
                                 echo "  Checking category: ${category}"
 
                                 # Split keywords by comma
-                                FOUND_IN_CATEGORY=()
+                                FOUND_IN_CATEGORY=0
                                 IFS=',' read -ra KEYWORD_ARRAY <<< "${keywords_str}"
 
                                 for keyword in "${KEYWORD_ARRAY[@]}"; do
@@ -376,23 +381,64 @@ METADATA
 
                                     # Case-insensitive search
                                     if echo "${DOC_CONTENT}" | grep -qi "${keyword}"; then
-                                        FOUND_IN_CATEGORY+=("${keyword}")
                                         echo "    ✓ Found: ${keyword}"
+                                        FOUND_IN_CATEGORY=1
                                     fi
                                 done
 
-                                # Add to findings if keywords found in this category
-                                if [ ${#FOUND_IN_CATEGORY[@]} -gt 0 ]; then
-                                    echo "  → ${category}: ${#FOUND_IN_CATEGORY[@]} keyword(s) found"
+                                # If keywords found, apply disposition hints
+                                if [ ${FOUND_IN_CATEGORY} -eq 1 ]; then
+                                    echo "  → ${category}: applying disposition hints"
+                                    FOUND_CATEGORIES="${FOUND_CATEGORIES}${category};"
+
+                                    # Parse hint values
+                                    escalate_hint=$(echo "${escalate_hint}" | xargs)
+                                    pm_hint=$(echo "${pm_hint}" | xargs)
+                                    hold_hint=$(echo "${hold_hint}" | xargs)
+                                    route_hint=$(echo "${route_hint}" | xargs)
+
+                                    # Apply hints (true = activate hint)
+                                    if [ "${escalate_hint}" = "true" ]; then
+                                        ESCALATE="true"
+                                        echo "    → ESCALATE: true"
+                                    fi
+                                    if [ "${pm_hint}" = "true" ]; then
+                                        PM_REQUIRED="true"
+                                        echo "    → PM_REQUIRED: true"
+                                    fi
+                                    if [ "${hold_hint}" = "true" ]; then
+                                        HOLD_IF_FOUND="true"
+                                        echo "    → HOLD_IF_FOUND: true"
+                                    fi
+                                    if [ -n "${route_hint}" ] && [ "${route_hint}" != "" ]; then
+                                        if [ -z "${ADDITIONAL_SIGNERS}" ]; then
+                                            ADDITIONAL_SIGNERS="${route_hint}"
+                                        else
+                                            ADDITIONAL_SIGNERS="${ADDITIONAL_SIGNERS},${route_hint}"
+                                        fi
+                                        echo "    → ADDITIONAL_SIGNERS: ${route_hint}"
+                                    fi
                                 fi
 
                             done < "${KEYWORDS_FILE}"
 
-                            echo "  Keywords extraction complete for: ${doc_name}"
+                            # Create disposition hints file for this document
+                            HINTS_FILE="/tmp/disposition-hints/${doc_name}.hints"
+                            cat > "${HINTS_FILE}" << HINTS
+{
+  "escalate": ${ESCALATE},
+  "pm_required": ${PM_REQUIRED},
+  "hold_if_found": ${HOLD_IF_FOUND},
+  "additional_signers": "${ADDITIONAL_SIGNERS}",
+  "found_categories": "${FOUND_CATEGORIES}"
+}
+HINTS
+
+                            echo "  ✓ Hints created for: ${doc_name}"
                         done
 
                         echo ""
-                        echo "[DEBUG] Keyword extraction stage completed"
+                        echo "[DEBUG] Keyword extraction and hints creation completed"
                         echo "========== END EXTRACT KEYWORDS =========="
                     '''
                 }
@@ -576,7 +622,41 @@ SIGBLOCK
                                 continue
                             fi
 
-                            echo "  ✓ Successfully routed to Pending/${DOC_TYPE}/"
+                            # Check for disposition hints
+                            HINTS_FILE="/tmp/disposition-hints/${doc_name}.hints"
+                            if [ -f "${HINTS_FILE}" ]; then
+                                HOLD_FLAG=$(jq -r '.hold_if_found // false' "${HINTS_FILE}" 2>/dev/null || echo "false")
+                                ESCALATE_FLAG=$(jq -r '.escalate // false' "${HINTS_FILE}" 2>/dev/null || echo "false")
+                                PM_REQUIRED=$(jq -r '.pm_required // false' "${HINTS_FILE}" 2>/dev/null || echo "false")
+                                ADDITIONAL_SIGNERS=$(jq -r '.additional_signers // ""' "${HINTS_FILE}" 2>/dev/null || echo "")
+                                FOUND_CATS=$(jq -r '.found_categories // ""' "${HINTS_FILE}" 2>/dev/null || echo "")
+
+                                if [ "${HOLD_FLAG}" = "true" ]; then
+                                    echo "  ⚠️ HOLD FLAG SET: Document held for review (TODOs/FIXMEs found)"
+                                    # Move to Hold/ instead of Pending for review
+                                    mkdir -p "Hold/${DOC_TYPE}"
+                                    mv "${PENDING_TYPE_DIR}/${doc_name}" "Hold/${DOC_TYPE}/${doc_name}"
+                                    echo "  → Moved to Hold/${DOC_TYPE}/ pending review"
+                                fi
+
+                                if [ "${ESCALATE_FLAG}" = "true" ]; then
+                                    echo "  🚨 ESCALATION: Document will be escalated to PM (urgent/blocker found)"
+                                fi
+
+                                if [ "${PM_REQUIRED}" = "true" ]; then
+                                    echo "  ⭐ PM_REQUIRED: Document needs PM signature/approval"
+                                fi
+
+                                if [ -n "${ADDITIONAL_SIGNERS}" ] && [ "${ADDITIONAL_SIGNERS}" != "" ]; then
+                                    echo "  👥 ADDITIONAL SIGNERS: ${ADDITIONAL_SIGNERS}"
+                                fi
+
+                                if [ -n "${FOUND_CATS}" ] && [ "${FOUND_CATS}" != "" ]; then
+                                    echo "  🏷️  Categories found: ${FOUND_CATS}"
+                                fi
+                            fi
+
+                            echo "  ✓ Successfully routed"
                             ROUTED=$((ROUTED + 1))
 
                         done < "${METADATA_FILES}"
