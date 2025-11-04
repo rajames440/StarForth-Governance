@@ -3,8 +3,6 @@
 // All file operations, logic, and data processing in Groovy DSL
 // External tools (git, gh) called as needed
 
-@Library('shared-library') _
-
 pipeline {
     agent any
 
