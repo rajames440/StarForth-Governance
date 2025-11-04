@@ -149,11 +149,11 @@ pipeline {
                             DOC_TITLE="${doc_name%.*}"
 
                             # Determine format from extension
-                            if [[ "${doc_name}" =~ \\.adoc$ ]]; then
+                            if [[ "${doc_name}" =~ \.adoc$ ]]; then
                                 FORMAT="asciidoc"
-                            elif [[ "${doc_name}" =~ \\.(md|markdown)$ ]]; then
+                            elif [[ "${doc_name}" =~ \.(md|markdown)$ ]]; then
                                 FORMAT="markdown"
-                            elif [[ "${doc_name}" =~ \\.pdf$ ]]; then
+                            elif [[ "${doc_name}" =~ \.pdf$ ]]; then
                                 FORMAT="pdf"
                             else
                                 FORMAT="other"
@@ -447,27 +447,27 @@ SIGBLOCK
                                 echo "  → Creating GitHub issue notification..."
 
                                 # Create issue with signer mentions
-                                ISSUE_BODY='Document pending signature collection.
+                                ISSUE_BODY="Document pending signature collection.
 
-**Document:** `\${doc_name}`
-**Type:** \${DOC_TYPE}
-**Title:** \${DOC_TITLE}
+**Document:** \`${doc_name}\`
+**Type:** ${DOC_TYPE}
+**Title:** ${DOC_TITLE}
 
 **Required Signers:**
-\$(echo "\${SIGNERS}" | sed '"'"'s/^/- @/'"'"' | paste -sd '"'"''"'"' -)
+$(echo "${SIGNERS}" | sed 's/^/- @/')
 
 **Action Required:**
-1. Review document in `Pending/\${DOC_TYPE}/\${doc_name}`
-2. Sign with GPG: `gpg --detach-sign --armor \${doc_name}`
-3. Create detached signature: `\${doc_name}.[your-username].asc`
+1. Review document in \`Pending/${DOC_TYPE}/${doc_name}\`
+2. Sign with GPG: \`gpg --detach-sign --armor ${doc_name}\`
+3. Create detached signature: \`${doc_name}.[your-username].asc\`
 4. Commit to repository or notify pipeline
 
 **Timeline:**
 - Day 1: Reminder notification
 - Day 3: PM escalation if not signed
 
-Created: \${TIMESTAMP}
-Branch: \${BRANCH_NAME}"'
+Created: ${TIMESTAMP}
+Branch: ${BRANCH_NAME}"
 
                                 gh issue create \
                                   --title "📋 Document Pending Signature: ${doc_name}" \
