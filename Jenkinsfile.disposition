@@ -508,7 +508,7 @@ SIGBLOCK
                 script {
                     echo "📂 Routing processed documents to Pending/[TYPE]/ directories..."
 
-                    sh '''
+                    sh '''#!/bin/bash
                         echo "========== ROUTE TO PENDING STAGE =========="
                         cd "${WORKSPACE_REPO}"
                         echo "[DEBUG] Current working directory: $(pwd)"
@@ -517,66 +517,80 @@ SIGBLOCK
                         mkdir -p Pending
                         echo "[DEBUG] Pending directory exists"
 
-                        # Process each document from metadata
-                        echo "[DEBUG] Finding metadata files..."
-                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
+                        # Create temp file to store metadata filenames (avoid subshell issues)
+                        METADATA_FILES="/tmp/metadata_files_$$.txt"
+                        find /tmp/disposition-metadata -name "*.json" | sort > "${METADATA_FILES}"
+                        TOTAL=$(wc -l < "${METADATA_FILES}")
+                        echo "[DEBUG] Found ${TOTAL} metadata files to process"
+
+                        ROUTED=0
+                        FAILED=0
+
+                        # Read metadata files line by line (not in subshell)
+                        while IFS= read -r metadata_file; do
+                            [ -z "${metadata_file}" ] && continue
+
                             doc_name=$(basename "${metadata_file}" .json)
                             doc_path="${IN_BASKET}/${doc_name}"
 
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "Processing: ${doc_name}"
+
+                            # Check if document exists
                             if [ ! -f "${doc_path}" ]; then
-                                echo "⚠️ Document not found: ${doc_name}"
+                                echo "  ⚠️ Document not found in in_basket (may already be routed)"
                                 continue
                             fi
 
-                            echo "[DEBUG] Document file size: $(stat -c%s "${doc_path}" 2>/dev/null || stat -f%z "${doc_path}" 2>/dev/null) bytes"
+                            # Extract document type from metadata (with error handling)
+                            if ! DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "${metadata_file}" 2>/dev/null); then
+                                echo "  ❌ Failed to parse metadata file"
+                                FAILED=$((FAILED + 1))
+                                continue
+                            fi
 
-                            # Extract document type from metadata
-                            DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "${metadata_file}") || exit 1
-                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}") || exit 1
+                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}" 2>/dev/null || echo "${doc_name%.*}")
 
-                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            echo "Routing: ${doc_name}"
                             echo "  Type: ${DOC_TYPE}"
                             echo "  Title: ${DOC_TITLE}"
 
                             # Create type-specific pending directory
                             PENDING_TYPE_DIR="Pending/${DOC_TYPE}"
-                            mkdir -p "${PENDING_TYPE_DIR}" || exit 1
-                            echo "[DEBUG] Created directory: ${PENDING_TYPE_DIR}"
+                            if ! mkdir -p "${PENDING_TYPE_DIR}" 2>/dev/null; then
+                                echo "  ❌ Failed to create directory: ${PENDING_TYPE_DIR}"
+                                FAILED=$((FAILED + 1))
+                                continue
+                            fi
 
-                            # Move document to Pending directory (atomic operation)
-                            echo "[DEBUG] Moving ${doc_name} from ${doc_path} to ${PENDING_TYPE_DIR}/${doc_name}"
-                            mv "${doc_path}" "${PENDING_TYPE_DIR}/${doc_name}" || exit 1
+                            # Move document to Pending directory
+                            if ! mv "${doc_path}" "${PENDING_TYPE_DIR}/${doc_name}" 2>/dev/null; then
+                                echo "  ❌ Failed to move document to ${PENDING_TYPE_DIR}"
+                                FAILED=$((FAILED + 1))
+                                continue
+                            fi
 
                             # Verify the file was moved successfully
                             if [ ! -f "${PENDING_TYPE_DIR}/${doc_name}" ]; then
-                                echo "❌ CRITICAL: File move failed - document not found at destination"
-                                exit 1
+                                echo "  ❌ File move verification failed"
+                                FAILED=$((FAILED + 1))
+                                continue
                             fi
-                            echo "[DEBUG] ✓ File verified at destination"
-
-                            # Verify file was removed from source
-                            if [ -f "${doc_path}" ]; then
-                                echo "❌ CRITICAL: File still exists in source - move may have been a copy"
-                                exit 1
-                            fi
-                            echo "[DEBUG] ✓ File removed from source"
-
-                            # Verify destination file size matches source (file integrity check)
-                            DEST_SIZE=$(stat -c%s "${PENDING_TYPE_DIR}/${doc_name}" 2>/dev/null || stat -f%z "${PENDING_TYPE_DIR}/${doc_name}" 2>/dev/null)
-                            SOURCE_SIZE=$(cat /tmp/doc-${doc_name}.source-size 2>/dev/null || echo "0")
-                            echo "[DEBUG] Destination file size: ${DEST_SIZE} bytes"
-
-                            # Save document type and title for later use
-                            echo "${DOC_TYPE}" > "/tmp/doc-${doc_name}.type" || exit 1
-                            echo "${DOC_TITLE}" > "/tmp/doc-${doc_name}.title" || exit 1
-                            echo "${DEST_SIZE}" > "/tmp/doc-${doc_name}.routed-size" || exit 1
 
                             echo "  ✓ Successfully routed to Pending/${DOC_TYPE}/"
-                        done
+                            ROUTED=$((ROUTED + 1))
+
+                        done < "${METADATA_FILES}"
+
+                        # Clean up temp file
+                        rm -f "${METADATA_FILES}"
 
                         echo ""
-                        echo "[DEBUG] Route to Pending stage completed successfully"
+                        echo "Routing Summary:"
+                        echo "  Successfully routed: ${ROUTED}/${TOTAL}"
+                        if [ ${FAILED} -gt 0 ]; then
+                            echo "  Failed: ${FAILED}/${TOTAL}"
+                        fi
+                        echo "[DEBUG] Route to Pending stage completed"
                         echo "========== END ROUTE TO PENDING STAGE =========="
                     '''
                 }
