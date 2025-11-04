@@ -552,154 +552,180 @@ SIGBLOCK
             }
             steps {
                 script {
-                    echo "📂 Routing processed documents to Pending/[TYPE]/ directories..."
+                    echo "📂 Routing processed documents to Pending/[TYPE]/ directories (Groovy DSL)..."
 
-                    sh '''#!/bin/bash
-                        echo "========== ROUTE TO PENDING STAGE =========="
-                        cd "${WORKSPACE_REPO}"
-                        echo "[DEBUG] Current working directory: $(pwd)"
+                    try {
+                        // Define base paths in Groovy
+                        def workspaceDir = new File(env.WORKSPACE)
+                        def inBasketDir = new File(env.WORKSPACE, 'in_basket')
+                        def pendingDir = new File(env.WORKSPACE, 'Pending')
+                        def metadataDir = new File('/tmp/disposition-metadata')
+                        def hintsDir = new File('/tmp/disposition-hints')
 
-                        # Create Pending directory if it doesn't exist
-                        mkdir -p Pending
-                        echo "[DEBUG] Pending directory exists"
+                        echo "[DEBUG] Workspace: ${workspaceDir.absolutePath}"
+                        echo "[DEBUG] In_Basket: ${inBasketDir.absolutePath}"
+                        echo "[DEBUG] Pending: ${pendingDir.absolutePath}"
 
-                        # Create temp file to store metadata filenames (avoid subshell issues)
-                        METADATA_FILES="/tmp/metadata_files_$$.txt"
-                        find /tmp/disposition-metadata -name "*.json" | sort > "${METADATA_FILES}"
-                        TOTAL=$(wc -l < "${METADATA_FILES}")
-                        echo "[DEBUG] Found ${TOTAL} metadata files to process"
+                        // Ensure Pending directory exists
+                        pendingDir.mkdirs()
+                        echo "[DEBUG] Pending directory ready: ${pendingDir.exists()}"
 
-                        ROUTED=0
-                        FAILED=0
+                        // Get all metadata files
+                        def metadataFiles = metadataDir.listFiles({ file ->
+                            file.name.endsWith('.json')
+                        } as FileFilter)?.sort { it.name }
 
-                        # Read metadata files line by line (not in subshell)
-                        while IFS= read -r metadata_file; do
-                            [ -z "${metadata_file}" ] && continue
+                        if (!metadataFiles) {
+                            echo "[WARN] No metadata files found"
+                            return
+                        }
 
-                            doc_name=$(basename "${metadata_file}" .json)
-                            doc_path="${IN_BASKET}/${doc_name}"
+                        int routed = 0
+                        int failed = 0
+                        def total = metadataFiles.size()
+
+                        echo "\\n[DEBUG] Processing ${total} metadata files\\n"
+
+                        metadataFiles.each { metadataFile ->
+                            String docName = metadataFile.name.replaceAll('\\.json$', '')
+                            File docPath = new File(inBasketDir, docName)
 
                             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            echo "Processing: ${doc_name}"
-                            echo "[DEBUG] Metadata file: ${metadata_file}"
-                            echo "[DEBUG] Document path: ${doc_path}"
+                            echo "Processing: ${docName}"
+                            echo "[DEBUG] Metadata file: ${metadataFile.absolutePath}"
+                            echo "[DEBUG] Document path: ${docPath.absolutePath}"
 
-                            # Check if document exists
-                            if [ ! -f "${doc_path}" ]; then
+                            // Check if document exists
+                            if (!docPath.exists()) {
                                 echo "  ⚠️ Document not found in in_basket (may already be routed)"
-                                echo "[DEBUG] Checked path: ${doc_path} - NOT FOUND"
-                                continue
-                            fi
-                            echo "[DEBUG] Document file exists: YES"
+                                echo "[DEBUG] File exists check: false"
+                                return
+                            }
+                            echo "[DEBUG] Document file exists: true (size: ${docPath.size()} bytes)"
 
-                            # Extract document type from metadata (with error handling)
-                            echo "[DEBUG] Parsing metadata JSON..."
-                            if ! DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "${metadata_file}" 2>&1); then
-                                echo "  ❌ Failed to parse metadata file"
-                                echo "[DEBUG] jq error: ${DOC_TYPE}"
-                                FAILED=$((FAILED + 1))
-                                continue
-                            fi
-                            echo "[DEBUG] DOC_TYPE: ${DOC_TYPE}"
+                            // Parse metadata JSON using Groovy
+                            try {
+                                def metadata = new groovy.json.JsonSlurper().parse(metadataFile)
+                                String docType = metadata.get('type', 'UNKNOWN')
+                                String docTitle = metadata.get('title', docName.replaceAll('\\.[^.]+$', ''))
 
-                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}" 2>/dev/null || echo "${doc_name%.*}")
-                            echo "[DEBUG] DOC_TITLE: ${DOC_TITLE}"
+                                echo "[DEBUG] Metadata parsed successfully"
+                                echo "[DEBUG] DOC_TYPE: ${docType}"
+                                echo "[DEBUG] DOC_TITLE: ${docTitle}"
+                                echo "  Type: ${docType}"
+                                echo "  Title: ${docTitle}"
 
-                            echo "  Type: ${DOC_TYPE}"
-                            echo "  Title: ${DOC_TITLE}"
+                                // Create type-specific pending directory
+                                File pendingTypeDir = new File(pendingDir, docType)
+                                echo "[DEBUG] Creating directory: ${pendingTypeDir.absolutePath}"
+                                if (!pendingTypeDir.mkdirs()) {
+                                    echo "  ❌ Failed to create directory: ${pendingTypeDir.absolutePath}"
+                                    echo "[DEBUG] mkdirs returned false"
+                                    failed++
+                                    return
+                                }
+                                echo "[DEBUG] Directory created/verified"
 
-                            # Create type-specific pending directory
-                            PENDING_TYPE_DIR="Pending/${DOC_TYPE}"
-                            echo "[DEBUG] Creating directory: ${PENDING_TYPE_DIR}"
-                            if ! mkdir -p "${PENDING_TYPE_DIR}" 2>&1; then
-                                echo "  ❌ Failed to create directory: ${PENDING_TYPE_DIR}"
-                                echo "[DEBUG] mkdir error output above"
-                                FAILED=$((FAILED + 1))
-                                continue
-                            fi
-                            echo "[DEBUG] Directory created/verified"
+                                // Move document to Pending directory
+                                File destFile = new File(pendingTypeDir, docName)
+                                echo "[DEBUG] Moving document: ${docPath.absolutePath} -> ${destFile.absolutePath}"
 
-                            # Move document to Pending directory (VERBOSE)
-                            echo "[DEBUG] Moving document: mv -v ${doc_path} ${PENDING_TYPE_DIR}/${doc_name}"
-                            if ! mv -v "${doc_path}" "${PENDING_TYPE_DIR}/${doc_name}" 2>&1; then
-                                echo "  ❌ Failed to move document to ${PENDING_TYPE_DIR}"
-                                echo "[DEBUG] mv command failed"
-                                FAILED=$((FAILED + 1))
-                                continue
-                            fi
-                            echo "[DEBUG] Document moved successfully"
+                                if (!docPath.renameTo(destFile)) {
+                                    echo "  ❌ Failed to move document to ${pendingTypeDir.absolutePath}"
+                                    echo "[DEBUG] renameTo returned false"
+                                    failed++
+                                    return
+                                }
+                                echo "[DEBUG] Document moved successfully"
 
-                            # Verify the file was moved successfully
-                            if [ ! -f "${PENDING_TYPE_DIR}/${doc_name}" ]; then
-                                echo "  ❌ File move verification failed"
-                                echo "[DEBUG] File not found at: ${PENDING_TYPE_DIR}/${doc_name}"
-                                FAILED=$((FAILED + 1))
-                                continue
-                            fi
-                            echo "[DEBUG] File verified at destination"
+                                // Verify the file was moved
+                                if (!destFile.exists()) {
+                                    echo "  ❌ File move verification failed"
+                                    echo "[DEBUG] File not found at destination: ${destFile.absolutePath}"
+                                    failed++
+                                    return
+                                }
+                                echo "[DEBUG] File verified at destination (size: ${destFile.size()} bytes)"
 
-                            # Check for disposition hints
-                            HINTS_FILE="/tmp/disposition-hints/${doc_name}.hints"
-                            echo "[DEBUG] Checking hints file: ${HINTS_FILE}"
-                            if [ -f "${HINTS_FILE}" ]; then
-                                echo "[DEBUG] Hints file found, parsing..."
-                                HOLD_FLAG=$(jq -r '.hold_if_found // false' "${HINTS_FILE}" 2>/dev/null || echo "false")
-                                ESCALATE_FLAG=$(jq -r '.escalate // false' "${HINTS_FILE}" 2>/dev/null || echo "false")
-                                PM_REQUIRED=$(jq -r '.pm_required // false' "${HINTS_FILE}" 2>/dev/null || echo "false")
-                                ADDITIONAL_SIGNERS=$(jq -r '.additional_signers // ""' "${HINTS_FILE}" 2>/dev/null || echo "")
-                                FOUND_CATS=$(jq -r '.found_categories // ""' "${HINTS_FILE}" 2>/dev/null || echo "")
+                                // Check for disposition hints
+                                File hintsFile = new File(hintsDir, "${docName}.hints")
+                                echo "[DEBUG] Checking hints file: ${hintsFile.absolutePath}"
 
-                                echo "[DEBUG] HOLD_FLAG: ${HOLD_FLAG}"
-                                echo "[DEBUG] ESCALATE_FLAG: ${ESCALATE_FLAG}"
-                                echo "[DEBUG] PM_REQUIRED: ${PM_REQUIRED}"
-                                echo "[DEBUG] ADDITIONAL_SIGNERS: ${ADDITIONAL_SIGNERS}"
-                                echo "[DEBUG] FOUND_CATS: ${FOUND_CATS}"
+                                if (hintsFile.exists()) {
+                                    try {
+                                        def hints = new groovy.json.JsonSlurper().parse(hintsFile)
+                                        boolean holdFlag = hints.get('hold_if_found', false)
+                                        boolean escalateFlag = hints.get('escalate', false)
+                                        boolean pmRequired = hints.get('pm_required', false)
+                                        String additionalSigners = hints.get('additional_signers', '')
+                                        String foundCats = hints.get('found_categories', '')
 
-                                if [ "${HOLD_FLAG}" = "true" ]; then
-                                    echo "  ⚠️ HOLD FLAG SET: Document held for review (TODOs/FIXMEs found)"
-                                    # Move to Hold/ instead of Pending for review
-                                    mkdir -p "Hold/${DOC_TYPE}"
-                                    echo "[DEBUG] Moving to Hold: mv -v ${PENDING_TYPE_DIR}/${doc_name} Hold/${DOC_TYPE}/${doc_name}"
-                                    mv -v "${PENDING_TYPE_DIR}/${doc_name}" "Hold/${DOC_TYPE}/${doc_name}"
-                                    echo "  → Moved to Hold/${DOC_TYPE}/ pending review"
-                                fi
+                                        echo "[DEBUG] Hints parsed successfully"
+                                        echo "[DEBUG] HOLD_FLAG: ${holdFlag}"
+                                        echo "[DEBUG] ESCALATE_FLAG: ${escalateFlag}"
+                                        echo "[DEBUG] PM_REQUIRED: ${pmRequired}"
+                                        echo "[DEBUG] ADDITIONAL_SIGNERS: ${additionalSigners}"
+                                        echo "[DEBUG] FOUND_CATS: ${foundCats}"
 
-                                if [ "${ESCALATE_FLAG}" = "true" ]; then
-                                    echo "  🚨 ESCALATION: Document will be escalated to PM (urgent/blocker found)"
-                                fi
+                                        if (holdFlag) {
+                                            echo "  ⚠️ HOLD FLAG SET: Document held for review (TODOs/FIXMEs found)"
+                                            File holdTypeDir = new File(env.WORKSPACE, "Hold/${docType}")
+                                            holdTypeDir.mkdirs()
+                                            File holdDestFile = new File(holdTypeDir, docName)
+                                            echo "[DEBUG] Moving to Hold: ${destFile.absolutePath} -> ${holdDestFile.absolutePath}"
+                                            if (destFile.renameTo(holdDestFile)) {
+                                                echo "  → Moved to Hold/${docType}/ pending review"
+                                            } else {
+                                                echo "  ❌ Failed to move to Hold directory"
+                                            }
+                                        }
 
-                                if [ "${PM_REQUIRED}" = "true" ]; then
-                                    echo "  ⭐ PM_REQUIRED: Document needs PM signature/approval"
-                                fi
+                                        if (escalateFlag) {
+                                            echo "  🚨 ESCALATION: Document will be escalated to PM (urgent/blocker found)"
+                                        }
 
-                                if [ -n "${ADDITIONAL_SIGNERS}" ] && [ "${ADDITIONAL_SIGNERS}" != "" ]; then
-                                    echo "  👥 ADDITIONAL SIGNERS: ${ADDITIONAL_SIGNERS}"
-                                fi
+                                        if (pmRequired) {
+                                            echo "  ⭐ PM_REQUIRED: Document needs PM signature/approval"
+                                        }
 
-                                if [ -n "${FOUND_CATS}" ] && [ "${FOUND_CATS}" != "" ]; then
-                                    echo "  🏷️  Categories found: ${FOUND_CATS}"
-                                fi
-                            else
-                                echo "[DEBUG] No hints file found"
-                            fi
+                                        if (additionalSigners) {
+                                            echo "  👥 ADDITIONAL SIGNERS: ${additionalSigners}"
+                                        }
 
-                            echo "  ✓ Successfully routed"
-                            ROUTED=$((ROUTED + 1))
+                                        if (foundCats) {
+                                            echo "  🏷️  Categories found: ${foundCats}"
+                                        }
 
-                        done < "${METADATA_FILES}"
+                                    } catch (Exception e) {
+                                        echo "[WARN] Failed to parse hints file: ${e.message}"
+                                    }
+                                } else {
+                                    echo "[DEBUG] No hints file found"
+                                }
 
-                        # Clean up temp file
-                        rm -f "${METADATA_FILES}"
+                                echo "  ✓ Successfully routed"
+                                routed++
+
+                            } catch (Exception e) {
+                                echo "  ❌ Failed to parse metadata: ${e.message}"
+                                echo "[DEBUG] Exception: ${e}"
+                                failed++
+                            }
+                        }
 
                         echo ""
                         echo "Routing Summary:"
-                        echo "  Successfully routed: ${ROUTED}/${TOTAL}"
-                        if [ ${FAILED} -gt 0 ]; then
-                            echo "  Failed: ${FAILED}/${TOTAL}"
-                        fi
+                        echo "  Successfully routed: ${routed}/${total}"
+                        if (failed > 0) {
+                            echo "  Failed: ${failed}/${total}"
+                        }
                         echo "[DEBUG] Route to Pending stage completed"
-                        echo "========== END ROUTE TO PENDING STAGE =========="
-                    '''
+
+                    } catch (Exception e) {
+                        echo "❌ CRITICAL ERROR in Route to Pending stage: ${e.message}"
+                        echo "[DEBUG] Stack trace: ${e}"
+                        throw e
+                    }
                 }
             }
         }
