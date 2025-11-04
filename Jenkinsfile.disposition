@@ -361,9 +361,11 @@ SIGBLOCK
                                 continue
                             fi
 
+                            echo "[DEBUG] Document file size: $(stat -c%s "${doc_path}" 2>/dev/null || stat -f%z "${doc_path}" 2>/dev/null) bytes"
+
                             # Extract document type from metadata
-                            DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "${metadata_file}")
-                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}")
+                            DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "${metadata_file}") || exit 1
+                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}") || exit 1
 
                             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                             echo "Routing: ${doc_name}"
@@ -372,20 +374,43 @@ SIGBLOCK
 
                             # Create type-specific pending directory
                             PENDING_TYPE_DIR="Pending/${DOC_TYPE}"
-                            mkdir -p "${PENDING_TYPE_DIR}"
+                            mkdir -p "${PENDING_TYPE_DIR}" || exit 1
+                            echo "[DEBUG] Created directory: ${PENDING_TYPE_DIR}"
 
-                            # Copy document to Pending directory
-                            cp "${doc_path}" "${PENDING_TYPE_DIR}/${doc_name}"
+                            # Move document to Pending directory (atomic operation)
+                            echo "[DEBUG] Moving ${doc_name} from ${doc_path} to ${PENDING_TYPE_DIR}/${doc_name}"
+                            mv "${doc_path}" "${PENDING_TYPE_DIR}/${doc_name}" || exit 1
 
-                            if [ $? -eq 0 ]; then
-                                # Save document type and title for later use
-                                echo "${DOC_TYPE}" > "/tmp/doc-${doc_name}.type"
-                                echo "${DOC_TITLE}" > "/tmp/doc-${doc_name}.title"
-                                echo "  ✓ Routed to Pending/${DOC_TYPE}/"
-                            else
-                                echo "  ⚠️ Failed to route document"
+                            # Verify the file was moved successfully
+                            if [ ! -f "${PENDING_TYPE_DIR}/${doc_name}" ]; then
+                                echo "❌ CRITICAL: File move failed - document not found at destination"
+                                exit 1
                             fi
+                            echo "[DEBUG] ✓ File verified at destination"
+
+                            # Verify file was removed from source
+                            if [ -f "${doc_path}" ]; then
+                                echo "❌ CRITICAL: File still exists in source - move may have been a copy"
+                                exit 1
+                            fi
+                            echo "[DEBUG] ✓ File removed from source"
+
+                            # Verify destination file size matches source (file integrity check)
+                            DEST_SIZE=$(stat -c%s "${PENDING_TYPE_DIR}/${doc_name}" 2>/dev/null || stat -f%z "${PENDING_TYPE_DIR}/${doc_name}" 2>/dev/null)
+                            SOURCE_SIZE=$(cat /tmp/doc-${doc_name}.source-size 2>/dev/null || echo "0")
+                            echo "[DEBUG] Destination file size: ${DEST_SIZE} bytes"
+
+                            # Save document type and title for later use
+                            echo "${DOC_TYPE}" > "/tmp/doc-${doc_name}.type" || exit 1
+                            echo "${DOC_TITLE}" > "/tmp/doc-${doc_name}.title" || exit 1
+                            echo "${DEST_SIZE}" > "/tmp/doc-${doc_name}.routed-size" || exit 1
+
+                            echo "  ✓ Successfully routed to Pending/${DOC_TYPE}/"
                         done
+
+                        echo ""
+                        echo "[DEBUG] Route to Pending stage completed successfully"
+                        echo "========== END ROUTE TO PENDING STAGE =========="
                     '''
                 }
             }
