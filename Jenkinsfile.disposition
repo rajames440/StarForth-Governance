@@ -31,14 +31,14 @@ pipeline {
             steps {
                 script {
                     echo "📋 Checking out StarForth-Governance repository..."
-                    checkout([
-                        $class: 'GitSCM',
-                        branches: [[name: '*/master']],
-                        userRemoteConfigs: [[
-                            url: "https://github.com/${env.GOVERNANCE_REPO}.git",
-                            credentialsId: 'github-credentials'
-                        ]]
-                    ])
+                    sh '''
+                        if [ ! -d .git ]; then
+                            git clone "https://github.com/${GOVERNANCE_REPO}.git" .
+                        fi
+                        git fetch origin master
+                        git checkout master
+                        git pull origin master
+                    '''
                 }
             }
         }
