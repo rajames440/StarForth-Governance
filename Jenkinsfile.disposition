@@ -149,11 +149,11 @@ pipeline {
                             DOC_TITLE="${doc_name%.*}"
 
                             # Determine format from extension
-                            if [[ "${doc_name}" =~ \.adoc$ ]]; then
+                            if [[ "${doc_name}" =~ [.]adoc$ ]]; then
                                 FORMAT="asciidoc"
-                            elif [[ "${doc_name}" =~ \.(md|markdown)$ ]]; then
+                            elif [[ "${doc_name}" =~ [.](md|markdown)$ ]]; then
                                 FORMAT="markdown"
-                            elif [[ "${doc_name}" =~ \.pdf$ ]]; then
+                            elif [[ "${doc_name}" =~ [.]pdf$ ]]; then
                                 FORMAT="pdf"
                             else
                                 FORMAT="other"
