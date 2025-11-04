@@ -42,7 +42,7 @@ pipeline {
 
     environment {
         GOVERNANCE_REPO = 'rajames440/StarForth-Governance'
-        WORKSPACE_REPO = "${WORKSPACE}/governance"
+        WORKSPACE_REPO = "${WORKSPACE}"
         SIGNATURES_FILE = "${WORKSPACE_REPO}/Security/Signatures.adoc"
         SEC_LOG = "${WORKSPACE_REPO}/Security/SEC_LOG.adoc"
         GIT_AUTHOR_NAME = "Signature Verification"
