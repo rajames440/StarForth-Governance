@@ -825,12 +825,84 @@ LOG_ENTRY
         success {
             script {
                 echo "✓ Documents processed successfully"
+
+                // Send success email
+                if (env.DOC_COUNT != "0" && !params.DRY_RUN) {
+                    echo "📧 Sending success notification email..."
+                    mail(
+                        subject: "✓ StarForth Disposition Pipeline Success - ${env.DOC_COUNT} document(s) routed",
+                        body: """
+                            Document Disposition Pipeline Execution Summary
+                            ==============================================
+
+                            Status: SUCCESS ✓
+                            Timestamp: ${env.TIMESTAMP}
+                            Documents Processed: ${env.DOC_COUNT}
+                            Branch: ${env.BRANCH_NAME ?: 'N/A'}
+
+                            Actions Completed:
+                            • Scanned in_basket for new documents
+                            • Classified documents and extracted metadata
+                            • Routed documents to Pending/[TYPE]/ directories
+                            • Created PR #1 (routing to Pending)
+                            • Notified signers via GitHub issues
+                            • Setup escalation tracking (Day 1 & Day 3)
+                            • Updated Security Event Log
+                            • Committed workflow changes
+                            • Pushed changes to GitHub
+
+                            Next Steps:
+                            → Pull latest changes: git pull origin master
+                            → Review routed documents in Pending/ directories
+                            → Check GitHub for signer notifications
+                            → Signers should verify and sign documents in Pending/[TYPE]/
+
+                            GitHub Repository: https://github.com/rajames440/StarForth-Governance
+                            Jenkins Build: ${env.BUILD_URL}
+                        """,
+                        to: "${env.CHANGE_AUTHOR_EMAIL ?: 'rajames440@gmail.com'}",
+                        mimeType: 'text/plain'
+                    )
+                }
             }
         }
 
         failure {
             script {
                 echo "❌ Pipeline encountered errors"
+
+                // Send failure email with debug info
+                echo "📧 Sending failure notification email..."
+                mail(
+                    subject: "❌ StarForth Disposition Pipeline FAILED",
+                    body: """
+                        Document Disposition Pipeline Execution Summary
+                        ==============================================
+
+                        Status: FAILED ❌
+                        Timestamp: ${env.TIMESTAMP}
+                        Documents Processed: ${env.DOC_COUNT ?: 'Unknown'}
+
+                        Pipeline failed during execution. Check the Jenkins logs for details.
+
+                        Debug Information:
+                        • Build Status: ${currentBuild.result}
+                        • Build URL: ${env.BUILD_URL}
+                        • Current Branch: ${env.BRANCH_NAME ?: 'N/A'}
+                        • Workspace: ${env.WORKSPACE}
+
+                        Common Issues:
+                        1. Check GitHub PAT (Personal Access Token) is valid
+                        2. Verify Jenkins credential 'github-credentials' is configured
+                        3. Check that in_basket/ contains documents
+                        4. Review full Jenkins logs for detailed error messages
+
+                        Jenkins Build: ${env.BUILD_URL}
+                        GitHub Repository: https://github.com/rajames440/StarForth-Governance
+                    """,
+                    to: "${env.CHANGE_AUTHOR_EMAIL ?: 'rajames440@gmail.com'}",
+                    mimeType: 'text/plain'
+                )
             }
         }
     }
