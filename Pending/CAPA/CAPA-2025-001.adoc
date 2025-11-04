@@ -1,0 +1,62 @@
+= CAPA-2025-001: Test Defect for Pipeline Validation
+
+== Executive Summary
+
+This is a test CAPA document created to validate the Phase 2 Jenkins disposition pipeline. It demonstrates the complete flow of document processing from in_basket through signature collection to vault archival.
+
+== Problem Statement
+
+=== Observed Behavior
+The governance system needs comprehensive testing to ensure all pipelines work correctly with real documents.
+
+=== Expected Behavior
+All documents submitted through in_basket should be automatically processed, classified, routed to Pending directories, and prepared for signature collection.
+
+== Reproduction Steps
+
+1. Place test document in `in_basket/`
+2. Trigger `Jenkinsfile.disposition` pipeline
+3. Verify document routes to `Pending/CAPA/`
+4. Check signature block was added
+5. Verify GitHub issue created for signers
+6. Confirm escalation tracking setup
+
+== Environment
+
+* System: Linux amd64
+* Version: 2.0.0
+* Platform: StarForth-Governance
+
+== Defect Classification
+
+* Category: Test/Validation
+* Severity: CRITICAL
+* Priority: HIGH
+
+== Root Cause & Location
+
+This is a synthetic test case demonstrating pipeline functionality. No actual root cause.
+
+== Dependencies & Relationships
+
+=== Parent Issues
+* None (test case)
+
+=== Related Issues
+* GitHub disposition pipeline
+* Vault routing system
+* Signature verification
+
+== Amendment Policy
+
+Document created: 2025-11-04
+Author: Claude Code
+Status: Test Document
+Purpose: Pipeline Validation
+== Signatures
+
+|===
+| Signer | Status | Date | Signature
+
+| rajames440 | Pending |  |
+|===
