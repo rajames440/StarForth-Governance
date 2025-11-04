@@ -24,7 +24,6 @@ pipeline {
     }
 
     options {
-        ws('/var/starforth/disposition-workspace')
         buildDiscarder(logRotator(numToKeepStr: '50'))
         timeout(time: 2, unit: 'HOURS')
         disableConcurrentBuilds()
