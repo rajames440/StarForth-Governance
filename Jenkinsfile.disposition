@@ -164,22 +164,6 @@ pipeline {
                             echo "[DEBUG] File exists: $(test -f "${doc_path}" && echo 'YES' || echo 'NO')"
                             echo "[DEBUG] File size: $(stat -c%s "${doc_path}" 2>/dev/null || stat -f%z "${doc_path}" 2>/dev/null) bytes"
 
-                            # Classify document based on filename pattern
-                            echo "  → Classifying document based on filename..."
-
-                            # Extract document type from filename (e.g., CAPA-001.adoc → CAPA)
-                            if [[ "${doc_name}" =~ ^([A-Z]+)-[0-9]+ ]]; then
-                                DOC_TYPE="${BASH_REMATCH[1]}"
-                                echo "[DEBUG] Regex matched - DOC_TYPE: ${DOC_TYPE}"
-                            else
-                                DOC_TYPE="UNKNOWN"
-                                echo "[DEBUG] Regex did not match - DOC_TYPE: UNKNOWN"
-                            fi
-
-                            # Extract title from filename (remove extension)
-                            DOC_TITLE="${doc_name%.*}"
-                            echo "[DEBUG] DOC_TITLE: ${DOC_TITLE}"
-
                             # Determine format from extension
                             if [[ "${doc_name}" =~ [.]adoc$ ]]; then
                                 FORMAT="asciidoc"
@@ -191,6 +175,63 @@ pipeline {
                                 FORMAT="other"
                             fi
                             echo "[DEBUG] FORMAT: ${FORMAT}"
+
+                            # Classify document based on CONTENT (not filename)
+                            echo "  → Extracting document type from content..."
+
+                            DOC_TYPE="UNKNOWN"
+                            DOC_TITLE="${doc_name%.*}"
+
+                            # Try to extract type from document content
+                            if [ "${FORMAT}" = "asciidoc" ] || [ "${FORMAT}" = "markdown" ]; then
+                                # Look for metadata in document headers/content
+                                # Pattern 1: AsciiDoc with = TITLE format
+                                if grep -q "^= " "${doc_path}" 2>/dev/null; then
+                                    HEADER=$(grep "^= " "${doc_path}" | head -1 | sed 's/^= //')
+                                    echo "[DEBUG] Found AsciiDoc header: ${HEADER}"
+                                    DOC_TITLE="${HEADER}"
+
+                                    # Extract type from header (e.g., "CAPA-001: Description" → CAPA)
+                                    if [[ "${HEADER}" =~ ^([A-Z]+)-[0-9]+ ]]; then
+                                        DOC_TYPE="${BASH_REMATCH[1]}"
+                                        echo "[DEBUG] Extracted type from header: ${DOC_TYPE}"
+                                    fi
+                                fi
+
+                                # Pattern 2: Look for type field in metadata block or frontmatter
+                                if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
+                                    # Check for YAML frontmatter or metadata markers
+                                    if grep -q "^type:" "${doc_path}" 2>/dev/null; then
+                                        DOC_TYPE=$(grep "^type:" "${doc_path}" | head -1 | sed 's/^type:[[:space:]]*//')
+                                        echo "[DEBUG] Extracted type from metadata: ${DOC_TYPE}"
+                                    fi
+                                fi
+
+                                # Pattern 3: Look for governance document keywords in content
+                                if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
+                                    if grep -qi "defect\|bug\|issue" "${doc_path}" 2>/dev/null && grep -qi "capa\|corrective" "${doc_path}" 2>/dev/null; then
+                                        DOC_TYPE="CAPA"
+                                        echo "[DEBUG] Inferred type from content: CAPA (defect/bug pattern)"
+                                    elif grep -qi "change.*request\|feature.*request" "${doc_path}" 2>/dev/null; then
+                                        DOC_TYPE="ECR"
+                                        echo "[DEBUG] Inferred type from content: ECR (change request pattern)"
+                                    elif grep -qi "security.*review\|vulnerability" "${doc_path}" 2>/dev/null; then
+                                        DOC_TYPE="SEC"
+                                        echo "[DEBUG] Inferred type from content: SEC (security pattern)"
+                                    fi
+                                fi
+                            fi
+
+                            # Fallback: Try filename pattern as last resort
+                            if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
+                                if [[ "${doc_name}" =~ ^([A-Z]+)-[0-9]+ ]]; then
+                                    DOC_TYPE="${BASH_REMATCH[1]}"
+                                    echo "[DEBUG] Fallback: Extracted type from filename: ${DOC_TYPE}"
+                                else
+                                    echo "[WARN] Could not determine document type from content or filename"
+                                    DOC_TYPE="UNKNOWN"
+                                fi
+                            fi
 
                             # Create metadata JSON with simple classification
                             echo "[DEBUG] Creating metadata file: /tmp/disposition-metadata/${doc_name}.json"
@@ -411,6 +452,54 @@ SIGBLOCK
                         echo ""
                         echo "[DEBUG] Route to Pending stage completed successfully"
                         echo "========== END ROUTE TO PENDING STAGE =========="
+                    '''
+                }
+            }
+        }
+
+        stage('Clean in_basket') {
+            when {
+                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🗑️ Removing processed documents from in_basket..."
+
+                    sh '''
+                        echo "========== CLEAN IN_BASKET STAGE =========="
+                        cd "${WORKSPACE_REPO}"
+                        echo "[DEBUG] Current working directory: $(pwd)"
+
+                        # Remove successfully routed documents from in_basket
+                        echo "[DEBUG] Finding processed documents to remove..."
+                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
+                            doc_name=$(basename "${metadata_file}" .json)
+                            doc_path="${IN_BASKET}/${doc_name}"
+
+                            # Only remove if document no longer exists in in_basket
+                            # (successfully moved to Pending)
+                            if [ ! -f "${doc_path}" ]; then
+                                echo "✓ ${doc_name} already removed from in_basket"
+                            else
+                                # Document still in in_basket - remove it
+                                echo "Removing: ${doc_name}"
+                                rm -f "${doc_path}"
+
+                                # Verify removal
+                                if [ ! -f "${doc_path}" ]; then
+                                    echo "  ✓ Successfully removed from in_basket"
+                                else
+                                    echo "  ⚠️ Failed to remove (permission issue?)"
+                                fi
+                            fi
+                        done
+
+                        echo ""
+                        echo "Documents remaining in in_basket:"
+                        find "${IN_BASKET}" -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | wc -l
+
+                        echo "[DEBUG] Clean in_basket stage completed"
+                        echo "========== END CLEAN IN_BASKET STAGE =========="
                     '''
                 }
             }
