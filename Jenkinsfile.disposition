@@ -121,7 +121,7 @@ pipeline {
                 script {
                     echo "🔬 Using Claude to classify documents and extract metadata..."
 
-                    sh '''
+                    sh '''#!/bin/bash
                         cd "${IN_BASKET}"
 
                         # Create temporary metadata directory
