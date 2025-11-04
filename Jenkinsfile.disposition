@@ -135,20 +135,40 @@ pipeline {
                             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                             echo "Analyzing: ${doc_name}"
 
-                            # Use Claude to analyze document
-                            # Returns JSON with: type, required_signers, title, format
-                            echo "  → Scanning document content with Claude..."
+                            # Classify document based on filename pattern
+                            echo "  → Classifying document based on filename..."
 
-                            DOC_CONTENT=$(cat "${doc_path}")
-                            claude --print --output-format json "Analyze this governance document and respond ONLY with valid JSON containing type, title, required_signers, format, and needs_conversion:
+                            # Extract document type from filename (e.g., CAPA-001.adoc → CAPA)
+                            if [[ "${doc_name}" =~ ^([A-Z]+)-[0-9]+ ]]; then
+                                DOC_TYPE="${BASH_REMATCH[1]}"
+                            else
+                                DOC_TYPE="UNKNOWN"
+                            fi
 
-\${DOC_CONTENT}
+                            # Extract title from filename (remove extension)
+                            DOC_TITLE="${doc_name%.*}"
 
-{\"type\": \"CAPA|ECR|ECO|FMEA|DHR|DMR|CER|DWG|ENG|SEC|IR|VAL|DTA|ART|MIN|REL|RMP|UNKNOWN\", \"title\": \"title\", \"required_signers\": [\"list\"], \"format\": \"asciidoc|markdown|pdf|docx|other\", \"needs_conversion\": true or false}" > "/tmp/disposition-metadata/${doc_name}.json" 2>&1 || {
-                                echo "  ⚠️ Claude analysis failed, using fallback classification"
-                                # Fallback: basic filename-based classification
-                                echo "{\"type\": \"UNKNOWN\", \"error\": \"claude_analysis_failed\"}" > "/tmp/disposition-metadata/${doc_name}.json"
-                            }
+                            # Determine format from extension
+                            if [[ "${doc_name}" =~ \.adoc$ ]]; then
+                                FORMAT="asciidoc"
+                            elif [[ "${doc_name}" =~ \.(md|markdown)$ ]]; then
+                                FORMAT="markdown"
+                            elif [[ "${doc_name}" =~ \.pdf$ ]]; then
+                                FORMAT="pdf"
+                            else
+                                FORMAT="other"
+                            fi
+
+                            # Create metadata JSON with simple classification
+                            cat > "/tmp/disposition-metadata/${doc_name}.json" << METADATA
+{
+  "type": "${DOC_TYPE}",
+  "title": "${DOC_TITLE}",
+  "required_signers": ["rajames440"],
+  "format": "${FORMAT}",
+  "needs_conversion": false
+}
+METADATA
 
                             # Display results
                             if [ -f "/tmp/disposition-metadata/${doc_name}.json" ]; then
