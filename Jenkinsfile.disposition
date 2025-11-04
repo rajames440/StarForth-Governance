@@ -149,11 +149,11 @@ pipeline {
                             DOC_TITLE="${doc_name%.*}"
 
                             # Determine format from extension
-                            if [[ "${doc_name}" =~ \.adoc$ ]]; then
+                            if [[ "${doc_name}" =~ \\.adoc$ ]]; then
                                 FORMAT="asciidoc"
-                            elif [[ "${doc_name}" =~ \.(md|markdown)$ ]]; then
+                            elif [[ "${doc_name}" =~ \\.(md|markdown)$ ]]; then
                                 FORMAT="markdown"
-                            elif [[ "${doc_name}" =~ \.pdf$ ]]; then
+                            elif [[ "${doc_name}" =~ \\.pdf$ ]]; then
                                 FORMAT="pdf"
                             else
                                 FORMAT="other"
@@ -241,7 +241,7 @@ METADATA
                                 DOC_CONTENT=$(cat "${doc_path}")
                                 claude --print "Convert this ${FORMAT} document to AsciiDoc format. Preserve all content, structure, and meaning. Output ONLY the AsciiDoc content, no explanations.
 
-\${DOC_CONTENT}" \
+\\${DOC_CONTENT}" \
                                     > "${doc_path}.asciidoc" 2>&1 || {
                                     echo "  ⚠️ Conversion failed for ${doc_name}"
                                     continue
