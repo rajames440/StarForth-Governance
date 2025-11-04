@@ -65,21 +65,36 @@ pipeline {
                     echo "🔍 Scanning in_basket for new documents..."
 
                     sh '''
+                        echo "========== SCAN IN_BASKET STAGE =========="
+                        echo "[DEBUG] Current working directory: $(pwd)"
+                        echo "[DEBUG] IN_BASKET variable: ${IN_BASKET}"
+
                         cd "${IN_BASKET}"
+                        echo "[DEBUG] Changed to: $(pwd)"
+                        echo "[DEBUG] Directory listing:"
+                        ls -la
+                        echo ""
 
                         # Find all documents (not DO_NOT_REMOVE_ME)
+                        echo "[DEBUG] Searching for documents (excluding DO_NOT_REMOVE_ME)..."
                         DOC_COUNT=$(find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | wc -l)
-                        echo "Found ${DOC_COUNT} document(s) in in_basket"
+                        echo "✓ Found ${DOC_COUNT} document(s) in in_basket"
 
                         if [ ${DOC_COUNT} -gt 0 ]; then
                             echo ""
                             echo "Documents ready for processing:"
                             find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort | while read doc; do
-                                echo "  - $(basename "$doc")"
+                                echo "  - $(basename "$doc") ($(stat -c%s "$doc" 2>/dev/null || stat -f%z "$doc" 2>/dev/null) bytes)"
                             done
+                        else
+                            echo "[WARN] No documents found in in_basket"
                         fi
 
+                        echo "[DEBUG] Writing DOC_COUNT=${DOC_COUNT} to /tmp/doc_count"
                         echo "${DOC_COUNT}" > /tmp/doc_count
+                        echo "[DEBUG] Contents of /tmp/doc_count: $(cat /tmp/doc_count)"
+                        echo "========== END SCAN IN_BASKET =========="
+                        echo ""
                     '''
 
                     env.DOC_COUNT = readFile('/tmp/doc_count').trim()
@@ -122,18 +137,32 @@ pipeline {
                     echo "🔬 Using Claude to classify documents and extract metadata..."
 
                     sh '''#!/bin/bash
+                        echo "========== CLASSIFY & EXTRACT METADATA =========="
                         cd "${IN_BASKET}"
+                        echo "[DEBUG] Working directory: $(pwd)"
 
                         # Create temporary metadata directory
+                        echo "[DEBUG] Creating metadata directory: /tmp/disposition-metadata"
                         mkdir -p /tmp/disposition-metadata
+                        echo "[DEBUG] Directory created. Contents:"
+                        ls -la /tmp/disposition-metadata
 
                         # Read each document and use Claude to classify
-                        find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort | while read doc; do
+                        echo "[DEBUG] Finding documents..."
+                        DOC_FILES=$(find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort)
+                        FILE_COUNT=$(echo "${DOC_FILES}" | wc -l)
+                        echo "[DEBUG] Found ${FILE_COUNT} document(s)"
+                        echo "${DOC_FILES}"
+
+                        echo "${DOC_FILES}" | while read doc; do
                             doc_name=$(basename "$doc")
                             doc_path="${IN_BASKET}/${doc_name}"
 
                             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                             echo "Analyzing: ${doc_name}"
+                            echo "[DEBUG] Document path: ${doc_path}"
+                            echo "[DEBUG] File exists: $(test -f "${doc_path}" && echo 'YES' || echo 'NO')"
+                            echo "[DEBUG] File size: $(stat -c%s "${doc_path}" 2>/dev/null || stat -f%z "${doc_path}" 2>/dev/null) bytes"
 
                             # Classify document based on filename pattern
                             echo "  → Classifying document based on filename..."
@@ -141,12 +170,15 @@ pipeline {
                             # Extract document type from filename (e.g., CAPA-001.adoc → CAPA)
                             if [[ "${doc_name}" =~ ^([A-Z]+)-[0-9]+ ]]; then
                                 DOC_TYPE="${BASH_REMATCH[1]}"
+                                echo "[DEBUG] Regex matched - DOC_TYPE: ${DOC_TYPE}"
                             else
                                 DOC_TYPE="UNKNOWN"
+                                echo "[DEBUG] Regex did not match - DOC_TYPE: UNKNOWN"
                             fi
 
                             # Extract title from filename (remove extension)
                             DOC_TITLE="${doc_name%.*}"
+                            echo "[DEBUG] DOC_TITLE: ${DOC_TITLE}"
 
                             # Determine format from extension
                             if [[ "${doc_name}" =~ [.]adoc$ ]]; then
@@ -158,8 +190,10 @@ pipeline {
                             else
                                 FORMAT="other"
                             fi
+                            echo "[DEBUG] FORMAT: ${FORMAT}"
 
                             # Create metadata JSON with simple classification
+                            echo "[DEBUG] Creating metadata file: /tmp/disposition-metadata/${doc_name}.json"
                             cat > "/tmp/disposition-metadata/${doc_name}.json" << METADATA
 {
   "type": "${DOC_TYPE}",
@@ -172,6 +206,10 @@ METADATA
 
                             # Display results
                             if [ -f "/tmp/disposition-metadata/${doc_name}.json" ]; then
+                                echo "[DEBUG] Metadata file created successfully"
+                                echo "[DEBUG] Metadata file contents:"
+                                cat "/tmp/disposition-metadata/${doc_name}.json"
+
                                 DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "/tmp/disposition-metadata/${doc_name}.json")
                                 DOC_TITLE=$(jq -r '.title // ""' "/tmp/disposition-metadata/${doc_name}.json")
                                 SIGNERS=$(jq -r '.required_signers // []' "/tmp/disposition-metadata/${doc_name}.json")
@@ -179,8 +217,16 @@ METADATA
                                 echo "  Type: ${DOC_TYPE}"
                                 echo "  Title: ${DOC_TITLE}"
                                 echo "  Signers Required: ${SIGNERS}"
+                            else
+                                echo "[ERROR] Failed to create metadata file!"
                             fi
                         done
+
+                        echo ""
+                        echo "[DEBUG] All metadata files created:"
+                        ls -la /tmp/disposition-metadata/
+                        echo "========== END CLASSIFY & EXTRACT METADATA =========="
+                        echo ""
                     '''
                 }
             }
