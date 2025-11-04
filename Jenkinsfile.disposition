@@ -3,7 +3,12 @@
 // Manages the complete lifecycle of documents from in_basket to signed vault
 
 pipeline {
-    agent any
+    agent {
+        node {
+            label 'master'
+            customWorkspace '/var/starforth/disposition-workspace'
+        }
+    }
 
     parameters {
         booleanParam(
