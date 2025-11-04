@@ -1,0 +1,399 @@
+////
+StarForth Governance Declaration - Effective 2025-10-31
+
+This document formally declares that all procedures and policies in the
+StarForth-Governance repository are fully in force and mandatory for all
+parties effective immediately.
+
+Document Metadata:
+- Document ID: GOVERNANCE_DECLARATION_2025-10-31
+- Version: 1.0
+- Created: 2025-10-31T00:00:00Z
+- Authority: Project Manager, Quality Manager, Engineering Manager
+- Status: ACTIVE / IN FORCE
+- Scope: All StarForth development, release, and governance activities
+////
+
+= StarForth Governance Declaration
+**Effective Date: 2025-10-31**
+
+**Document ID:** GOVERNANCE_DECLARATION_2025-10-31 +
+**Version:** 1.0 +
+**Status:** ACTIVE / IN FORCE +
+**Authority:** Project Manager, Quality Manager, Engineering Manager +
+**Last Updated:** 2025-10-31
+
+---
+
+== DECLARATION
+
+[NOTE]
+====
+**Effective immediately as of 2025-10-31 00:00 UTC**, all procedures and policies contained in the StarForth-Governance repository are **FULLY IN FORCE** and **MANDATORY** for all parties.
+====
+
+---
+
+== AUTHORITY
+
+This declaration is issued by the three senior leadership roles of the StarForth project:
+
+[cols="1h,3"]
+|===
+| **Role** | **Authority**
+
+| **Project Manager (PM)**
+| Robert A. James (Captain Bob) +
+rajames440@gmail.com +
+Final authority on all releases, governance decisions, and prod branch access
+
+| **Quality Manager (QM)**
+| Robert A. James (Captain Bob) +
+rajames440@gmail.com +
+Authority over CAPA approvals, quality gates, and compliance
+
+| **Engineering Manager (EM)**
+| Robert A. James (Captain Bob) +
+rajames440@gmail.com +
+Technical direction and architecture governance
+|===
+
+---
+
+== SCOPE
+
+This declaration establishes mandatory compliance with governance procedures for:
+
+=== Development & Change Control
+- Engineering Change Request (ECR) process
+- Engineering Change Order (ECO) process
+- Code review and approval workflows
+- Branch protection rules
+- Commit signing requirements (GPG)
+
+=== Defect & Correction Management
+- Corrective/Preventive Action (CAPA) process
+- Failure Mode & Effects Analysis (FMEA)
+- Defect severity classification
+- Root cause analysis requirements
+- Effectiveness checking procedures
+
+=== Release & Deployment
+- Project Manager sole authority to push to prod branch
+- Release approval and verification procedures
+- Version numbering (semantic versioning)
+- Checksum verification requirements
+- Release notes and documentation standards
+
+=== Document Control
+- in_basket/ capture and routing procedures
+- SIGNATURE_TRACKING and esignature processes
+- Document metadata standards
+- Reference/ organization and archival
+- Governance document version control
+
+=== Quality Assurance
+- Testing strategy and test execution
+- Formal verification (Isabelle/HOL) procedures
+- Quality gates and pass/fail criteria
+- Performance benchmarking standards
+- Security policy and incident response
+
+=== Team Roles & Responsibilities
+- Developer procedures (ECR creation, commit standards)
+- QA Lead procedures (CAPA review, approval authority)
+- Project Manager procedures (release approval, version authority)
+- Governance Lead procedures (document routing, workflow management)
+- Release Manager procedures (deployment coordination)
+
+---
+
+== APPLICABLE DOCUMENTS
+
+The following documents are **authoritative** and must be followed without exception:
+
+=== Foundation Policies
+- [ ] `QUALITY_POLICY.adoc` - Quality objectives and standards
+- [ ] `SECURITY_POLICY.adoc` - Security requirements and incident response
+- [ ] `TEST_STRATEGY.adoc` - Testing approach and standards
+- [ ] `QUALITY_CHARACTERISTICS.adoc` - ISO 25010 quality mapping
+
+=== Process Documents
+- [ ] `01-ECR_PROCESS.adoc` - Engineering Change Request procedures
+- [ ] `02-ECO_PROCESS.adoc` - Engineering Change Order procedures
+- [ ] `03-CAPA_PROCESS.adoc` - Corrective/Preventive Action procedures
+- [ ] `04-FMEA_PROCESS.adoc` - Failure Mode & Effects Analysis
+- [ ] `05-CROSS_REFERENCE_GUIDE.adoc` - Traceability and linking
+- [ ] `06-SIGNATORY_MATRIX.adoc` - Approval authority matrix
+- [ ] `07-PM_CHECKLIST_TEMPLATE.adoc` - PM review template
+- [ ] `08-QA_CHECKLIST_TEMPLATE.adoc` - QA decision template
+- [ ] `09-THEORY_JUSTIFICATION_GUIDE.adoc` - Formal verification requirements
+
+=== Reference Documents
+- [ ] `GOVERNANCE_REFERENCE_MANUAL.adoc` - Master governance guide
+- [ ] `SIGNATURE_TRACKING.adoc` - Master signature control document
+
+=== Formal Specifications
+- [ ] `Reference/FormalVerification/Specifications/*.thy` - Isabelle/HOL theories (9 files)
+
+=== Operational Guides (StarForth)
+- [ ] `StarForth/docs/DOCUMENT_CONTROL_USER_GUIDE.adoc` - Comprehensive user guide (Parts I-VII)
+- [ ] `StarForth/docs/DOCUMENT_CONTROL_VALIDATION_PROTOCOL.adoc` - Test cases and FMEA
+- [ ] `StarForth/in_basket/README.adoc` - Document capture procedures
+
+---
+
+== CRITICAL PROCEDURES IN FORCE
+
+=== Version Control & Release Authority
+
+**CRITICAL RULE:** Only the Project Manager (PM) can push code to the prod branch.
+
+**Versioning Rules:**
+- CAPA closure → PATCH version increment (automatic)
+- ECO approval → MINOR version increment (automatic)
+- Major version → PM discretion only (manual decision)
+
+**Release Process:**
+1. Code review on qual branch (team review)
+2. QUAL pipeline validation (all tests passing)
+3. PM reviews release readiness
+4. **PM pushes to prod branch (ONLY PM CAN DO THIS)**
+5. PROD pipeline builds binary and captures artifacts
+6. PM verifies checksums
+7. PM approves release
+8. Release Manager coordinates deployment
+
+=== CAPA Approval Chain
+
+**Procedure:**
+1. QUAL pipeline auto-generates CAPA on test failure
+2. QA Lead reviews CAPA
+3. QA Lead approves or rejects
+4. If approved: Governance Lead routes to archive
+5. Version number incremented (automatic)
+6. Release tagged and deployed
+
+**Approval Authority:**
+- QA Lead approval is required (mandatory)
+- PM approval on release is required (mandatory)
+- No exceptions without ECR process
+
+=== Document Control Workflow
+
+**Procedure:**
+1. Documents generated (automated or manual)
+2. Captured in in_basket/ directory
+3. Git committed with audit trail
+4. Governance Lead monitors for documents
+5. Documents routed to Reference/ locations
+6. Signatures obtained (if required)
+7. Archived with complete audit trail
+
+**Mandatory for:**
+- All governance documents
+- All process changes
+- All policy updates
+- All formal specifications
+
+---
+
+== IMPLEMENTATION STATUS
+
+=== Immediately Operational ✅
+The following are fully operational and mandatory:
+- ✅ QUALITY_POLICY.adoc
+- ✅ SECURITY_POLICY.adoc
+- ✅ ECR/ECO/CAPA/FMEA processes
+- ✅ DOCUMENT_CONTROL_USER_GUIDE.adoc (Parts I-VII)
+- ✅ DOCUMENT_CONTROL_VALIDATION_PROTOCOL.adoc
+- ✅ in_basket/ capture and routing
+- ✅ Version numbering procedures
+- ✅ Signatory matrix and approval workflows
+- ✅ Formal specifications (9 .thy files)
+
+=== Identified Gaps (CAPA Management)
+The following gaps have been identified and are tracked through the CAPA system:
+
+[cols="1,1,1"]
+|===
+| Gap Category | CAPA Issue | Status
+
+| Backup & Disaster Recovery
+| CAPA-035
+| Pending (16 hours effort)
+
+| Audit Trail Integrity
+| CAPA-036
+| Pending (16 hours effort)
+
+| Monitoring & Alerting
+| CAPA-037
+| Pending (12 hours effort)
+
+| Access Control & Security
+| CAPA-038
+| Pending (12 hours effort)
+
+| 14 Additional Gaps
+| CAPA-039 through CAPA-052
+| Pending (tracked in gap analysis)
+
+| Version Control of Deliverables
+| CAPA-053
+| Pending (16 hours effort)
+|===
+
+**Important:** The existence of identified gaps does **NOT** waive procedure compliance. All gaps are managed through the same governance framework using the CAPA process.
+
+---
+
+== ENFORCEMENT & COMPLIANCE
+
+=== Mandatory Compliance
+
+All parties must comply with these procedures:
+
+1. **Developers** must follow:
+   - ECR process for change proposals
+   - Commit message standards
+   - Code review procedures
+   - Branch protection rules
+
+2. **QA Lead** must:
+   - Review all CAPAs
+   - Approve/reject with documented rationale
+   - Maintain quality gates
+   - Sign governance documents
+
+3. **Project Manager** must:
+   - Approve all releases
+   - Verify checksums and artifacts
+   - Authorize prod branch pushes (exclusive authority)
+   - Make major version decisions
+
+4. **Governance Lead** must:
+   - Monitor in_basket/ daily
+   - Route documents within SLA (24 hours recommended)
+   - Manage signatures and approvals
+   - Maintain Reference/ organization
+
+5. **All AI Agents** (Codex, Claude, GPT-5) must:
+   - Follow task assignments and procedures
+   - Document work with clear audit trail
+   - Request approval before shipping code/docs
+   - Flag deviations immediately
+
+=== Deviations & Exceptions
+
+Any deviation from these procedures must be:
+1. **Requested** through the ECR process
+2. **Justified** with impact analysis
+3. **Approved** by appropriate authority (PM/QM/EM)
+4. **Tracked** in governance system
+5. **Reviewed** in next governance cycle
+
+Non-compliance will be tracked as a quality issue and may result in CAPA process initiation.
+
+=== Audit & Oversight
+
+- **Weekly:** PM reviews compliance
+- **Monthly:** QM audits CAPA and approval processes
+- **Quarterly:** Full governance system review
+- **Annually:** Comprehensive compliance audit
+
+---
+
+== EFFECTIVE DATES & TRANSITIONS
+
+=== Immediate Effectiveness (2025-10-31)
+All procedures are **immediately in effect**. No grace period.
+
+=== Parallel Implementation
+- CAPAs 035-053 are **tracking gaps** (not waiving procedures)
+- Gaps are **managed** through the same governance system
+- Full operational validation planned (before production release)
+
+=== Next Review
+- **Date:** 2025-12-01
+- **Scope:** Gap analysis, CAPA progress, procedure effectiveness
+- **Authority:** PM with QM and EM input
+
+---
+
+== SIGNATURES
+
+[WARNING]
+====
+This declaration is issued with full authority by the three senior leadership roles of StarForth. Compliance is non-negotiable.
+====
+
+**Issued By:**
+
+[cols="1,1,1"]
+|===
+| **Role** | **Name** | **Authority**
+
+| Project Manager
+| Robert A. James (Captain Bob)
+| Final release authority, prod branch exclusive access
+
+| Quality Manager
+| Robert A. James (Captain Bob)
+| CAPA approval authority, quality gates
+
+| Engineering Manager
+| Robert A. James (Captain Bob)
+| Technical direction and architecture
+
+|===
+
+**Declaration Effective:** 2025-10-31 00:00:00 UTC
+
+**Document Location:** `StarForth/docs/GOVERNANCE_DECLARATION_2025-10-31.adoc` +
+**Canonical Location:** `StarForth-Governance/GOVERNANCE_DECLARATION_2025-10-31.adoc`
+
+---
+
+== RELATED DOCUMENTATION
+
+- `governance/GOVERNANCE_REFERENCE_MANUAL.adoc` - Master governance guide
+- `StarForth/docs/DOCUMENT_CONTROL_USER_GUIDE.adoc` - User procedures
+- `StarForth/docs/DOCUMENT_CONTROL_GAP_ANALYSIS.md` - Gap analysis
+- `StarForth/COMPREHENSIVE_DEFECTS_FOR_CAPA.md` - Defect tracking
+- GitHub Issues: CAPA-035 through CAPA-053 - Gap tracking
+
+---
+
+== ACKNOWLEDGMENT
+
+All parties acknowledge receipt and understanding of this declaration.
+
+**Development Team Acknowledgment:**
+- [ ] Codex: Acknowledged and compliant (date: _______)
+- [ ] Claude: Acknowledged and compliant (date: _______)
+- [ ] GPT-5: Acknowledged and compliant (date: _______)
+
+**Project Stakeholders:**
+- [ ] Project Manager: Issued (date: 2025-10-31)
+- [ ] Quality Manager: Issued (date: 2025-10-31)
+- [ ] Engineering Manager: Issued (date: 2025-10-31)
+
+---
+
+**GOVERNANCE DECLARATION ACTIVE**
+
+**Status:** FULLY IN FORCE AS OF 2025-10-31 00:00 UTC +
+**Next Review:** 2025-12-01 +
+**Authority:** StarForth Senior Leadership (PM/QM/EM)
+
+All procedures mandatory. All exceptions require ECR approval.
+
+No grace period. Full compliance expected immediately.
+== Signatures
+
+|===
+| Signer | Status | Date | Signature
+
+| rajames440 | Pending |  |
+|===
