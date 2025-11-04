@@ -3,12 +3,7 @@
 // Manages the complete lifecycle of documents from in_basket to signed vault
 
 pipeline {
-    agent {
-        node {
-            label 'master'
-            customWorkspace '/var/starforth/disposition-workspace'
-        }
-    }
+    agent any
 
     parameters {
         booleanParam(
@@ -29,6 +24,7 @@ pipeline {
     }
 
     options {
+        ws('/var/starforth/disposition-workspace')
         buildDiscarder(logRotator(numToKeepStr: '50'))
         timeout(time: 2, unit: 'HOURS')
         disableConcurrentBuilds()
