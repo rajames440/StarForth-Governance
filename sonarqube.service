@@ -1,0 +1,29 @@
+[Unit]
+Description=SonarQube Service
+After=network.target syslog.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sonarqube
+Group=sonarqube
+# Adjust these paths to wherever YOU untarred the damn thing
+ExecStart=/opt/sonarqube/bin/linux-x86-64/sonar.sh start
+ExecStop=/opt/sonarqube/bin/linux-x86-64/sonar.sh stop
+Restart=always
+LimitNOFILE=65536
+# SonarQube needs these or it whines like a puppy
+LimitNPROC=4096
+
+# Hardening (because we’re not heathens)
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+
+# If you want logs in journalctl
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
