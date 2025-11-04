@@ -447,27 +447,38 @@ SIGBLOCK
                                 echo "  → Creating GitHub issue notification..."
 
                                 # Create issue with signer mentions
-                                ISSUE_BODY="Document pending signature collection.
+                                ISSUE_BODY=$(cat <<'ISSUE_EOF'
+Document pending signature collection.
 
-**Document:** \`\${doc_name}\`
-**Type:** \${DOC_TYPE}
-**Title:** \${DOC_TITLE}
+**Document:** `DOCUMENT_PLACEHOLDER`
+**Type:** TYPE_PLACEHOLDER
+**Title:** TITLE_PLACEHOLDER
 
 **Required Signers:**
-\$(echo "\${SIGNERS}" | sed 's/^/- @/')
+SIGNERS_PLACEHOLDER
 
 **Action Required:**
-1. Review document in \`Pending/\${DOC_TYPE}/\${doc_name}\`
-2. Sign with GPG: \`gpg --detach-sign --armor \${doc_name}\`
-3. Create detached signature: \`\${doc_name}.[your-username].asc\`
+1. Review document in `Pending/TYPE_PLACEHOLDER/DOCUMENT_PLACEHOLDER`
+2. Sign with GPG: `gpg --detach-sign --armor DOCUMENT_PLACEHOLDER`
+3. Create detached signature: `DOCUMENT_PLACEHOLDER.[your-username].asc`
 4. Commit to repository or notify pipeline
 
 **Timeline:**
 - Day 1: Reminder notification
 - Day 3: PM escalation if not signed
 
-Created: \${TIMESTAMP}
-Branch: \${BRANCH_NAME}"
+Created: TIMESTAMP_PLACEHOLDER
+Branch: BRANCH_PLACEHOLDER
+ISSUE_EOF
+)
+                                # Replace placeholders with actual variable values
+                                ISSUE_BODY="${ISSUE_BODY//DOCUMENT_PLACEHOLDER/${doc_name}}"
+                                ISSUE_BODY="${ISSUE_BODY//TYPE_PLACEHOLDER/${DOC_TYPE}}"
+                                ISSUE_BODY="${ISSUE_BODY//TITLE_PLACEHOLDER/${DOC_TITLE}}"
+                                ISSUE_BODY="${ISSUE_BODY//TIMESTAMP_PLACEHOLDER/${TIMESTAMP}}"
+                                ISSUE_BODY="${ISSUE_BODY//BRANCH_PLACEHOLDER/${BRANCH_NAME}}"
+                                SIGNERS_LIST=$(echo "${SIGNERS}" | sed 's/^/- @/')
+                                ISSUE_BODY="${ISSUE_BODY//SIGNERS_PLACEHOLDER/${SIGNERS_LIST}}"
 
                                 gh issue create \
                                   --title "📋 Document Pending Signature: ${doc_name}" \
