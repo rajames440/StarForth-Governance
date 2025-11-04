@@ -317,6 +317,88 @@ METADATA
             }
         }
 
+        stage('Extract Quality & Governance Keywords') {
+            when {
+                expression { env.DOC_COUNT != "0" }
+            }
+            steps {
+                script {
+                    echo "🔍 Extracting quality & governance keywords from document content..."
+
+                    sh '''#!/bin/bash
+                        echo "========== EXTRACT QUALITY & GOVERNANCE KEYWORDS =========="
+                        cd "${WORKSPACE_REPO}"
+
+                        KEYWORDS_FILE="${WORKSPACE_REPO}/keywords.txt"
+
+                        if [ ! -f "${KEYWORDS_FILE}" ]; then
+                            echo "[WARN] Keywords file not found at ${KEYWORDS_FILE}"
+                            echo "[DEBUG] Skipping keyword extraction stage"
+                            echo "========== END EXTRACT KEYWORDS =========="
+                            exit 0
+                        fi
+
+                        echo "[DEBUG] Keywords file found: ${KEYWORDS_FILE}"
+
+                        # Process each document with keyword extraction
+                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
+                            doc_name=$(basename "${metadata_file}" .json)
+                            doc_path="${IN_BASKET}/${doc_name}"
+
+                            if [ ! -f "${doc_path}" ]; then
+                                echo "[WARN] Document not found: ${doc_name}"
+                                continue
+                            fi
+
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "Scanning: ${doc_name}"
+
+                            # Read document content (lowercased for case-insensitive matching)
+                            DOC_CONTENT=$(cat "${doc_path}" | tr '[:upper:]' '[:lower:]')
+
+                            # Parse keywords file and check each category
+                            KEYWORD_FINDINGS="{\"found_keywords\": {}}"
+                            CATEGORY_FLAGS="[]"
+
+                            while IFS='|' read -r category keywords_str; do
+                                # Skip comments and empty lines
+                                [[ "${category}" =~ ^# ]] && continue
+                                [ -z "${category}" ] && continue
+
+                                echo "  Checking category: ${category}"
+
+                                # Split keywords by comma
+                                FOUND_IN_CATEGORY=()
+                                IFS=',' read -ra KEYWORD_ARRAY <<< "${keywords_str}"
+
+                                for keyword in "${KEYWORD_ARRAY[@]}"; do
+                                    keyword=$(echo "${keyword}" | xargs) # trim whitespace
+
+                                    # Case-insensitive search
+                                    if echo "${DOC_CONTENT}" | grep -qi "${keyword}"; then
+                                        FOUND_IN_CATEGORY+=("${keyword}")
+                                        echo "    ✓ Found: ${keyword}"
+                                    fi
+                                done
+
+                                # Add to findings if keywords found in this category
+                                if [ ${#FOUND_IN_CATEGORY[@]} -gt 0 ]; then
+                                    echo "  → ${category}: ${#FOUND_IN_CATEGORY[@]} keyword(s) found"
+                                fi
+
+                            done < "${KEYWORDS_FILE}"
+
+                            echo "  Keywords extraction complete for: ${doc_name}"
+                        done
+
+                        echo ""
+                        echo "[DEBUG] Keyword extraction stage completed"
+                        echo "========== END EXTRACT KEYWORDS =========="
+                    '''
+                }
+            }
+        }
+
         stage('Verify Git Status') {
             steps {
                 script {

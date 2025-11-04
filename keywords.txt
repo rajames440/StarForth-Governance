@@ -1,0 +1,34 @@
+# Governance Document Quality & Keyword Extraction Configuration
+# Format: CATEGORY|keyword1,keyword2,keyword3
+# Lines starting with # are comments
+# Use lowercase for matching (pipeline does case-insensitive search)
+
+# Quality & Testing Keywords
+quality_testing|validation,verified,testing,test case,pass/fail,coverage,regression,acceptance criteria,qa,quality assurance,test harness,pass all tests,fail-fast,test plan,test strategy,test automation
+
+# Governance & Compliance Keywords
+governance_compliance|governance,complian,audit,tracked,documented,policy,procedure,requirement,mandate,approval,review,sign-off,authorization,regulatory,standards,control,control plan
+
+# Risk Assessment & Mitigation Keywords
+risk_assessment|risk assessment,risk level,mitigation,action item,risk priority,rpn,severity,detection,mitigat,risk acceptance,risk matrix
+
+# Validation & Verification Keywords
+validation_verification|validated,verification,conformance,impact analysis,root cause,failure mode,effects analysis,hazard,safety,fault tree
+
+# Notes & Documentation Keywords
+notes_documentation|note,caveat,assumption,limitation,known issue,workaround,todo,fixme,deprecated,follow-up,pending,outstanding,remark,addendum
+
+# Escalation & Priority Keywords
+escalation_priority|urgent,escalat,blocker,must have,deadline,sla,time-sensitive,critical path,high priority,emergency,immediate,asap
+
+# Process & Workflow Keywords
+process_workflow|workflow,process,step,stage,gate,phase,approval gate,engineering manager,quality manager,eng_mgr,qual_mgr,disposition,signature,signoff
+
+# Change & Impact Keywords
+change_impact|impact,affected,change,modification,update,breaking change,backward compatible,regression risk,dependent,relationship,parent issue,child issue
+
+# Status Keywords
+status_keywords|draft,pending,review,approved,rejected,conditional,hold,in progress,complete,signed,verified,archived
+
+# Document Section Keywords (indicates completeness)
+section_keywords|problem statement,how to reproduce,expected behavior,root cause,solution,acceptance criteria,test case,mitigation,dependencies,related issues
