@@ -342,12 +342,16 @@ SIGBLOCK
                     echo "📂 Routing processed documents to Pending/[TYPE]/ directories..."
 
                     sh '''
+                        echo "========== ROUTE TO PENDING STAGE =========="
                         cd "${WORKSPACE_REPO}"
+                        echo "[DEBUG] Current working directory: $(pwd)"
 
                         # Create Pending directory if it doesn't exist
                         mkdir -p Pending
+                        echo "[DEBUG] Pending directory exists"
 
                         # Process each document from metadata
+                        echo "[DEBUG] Finding metadata files..."
                         find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
                             doc_name=$(basename "${metadata_file}" .json)
                             doc_path="${IN_BASKET}/${doc_name}"
@@ -396,17 +400,25 @@ SIGBLOCK
                     echo "🌿 Creating feature branch for document processing..."
 
                     sh '''
+                        echo "========== CREATE FEATURE BRANCH =========="
                         cd "${WORKSPACE_REPO}"
+                        echo "[DEBUG] Working directory: $(pwd)"
+                        echo "[DEBUG] Current branch before: $(git rev-parse --abbrev-ref HEAD)"
 
                         # Create a single branch for this disposition batch
                         BRANCH_NAME="doc/disposition-$(date +%s)"
+                        echo "[DEBUG] Creating new branch: ${BRANCH_NAME}"
 
                         git checkout -b "${BRANCH_NAME}"
-                        echo "Created branch: ${BRANCH_NAME}"
+                        echo "✓ Created branch: ${BRANCH_NAME}"
+                        echo "[DEBUG] Current branch after: $(git rev-parse --abbrev-ref HEAD)"
                         echo "${BRANCH_NAME}" > /tmp/branch_name
+                        echo "[DEBUG] Wrote BRANCH_NAME to /tmp/branch_name: $(cat /tmp/branch_name)"
+                        echo "========== END CREATE FEATURE BRANCH =========="
                     '''
 
                     env.BRANCH_NAME = readFile('/tmp/branch_name').trim()
+                    echo "[GROOVY] env.BRANCH_NAME set to: ${env.BRANCH_NAME}"
                 }
             }
         }
