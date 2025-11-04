@@ -218,7 +218,7 @@ METADATA
                 script {
                     echo "🔄 Converting formats to AsciiDoc and adding signature blocks..."
 
-                    sh '''
+                    sh '''#!/bin/bash
                         cd "${IN_BASKET}"
 
                         # Process each document metadata
