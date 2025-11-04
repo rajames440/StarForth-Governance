@@ -187,13 +187,13 @@ pipeline {
                             if [ "${FORMAT}" = "markdown" ] || [ "${FORMAT}" = "asciidoc" ]; then
                                 # PATTERN 1: Look for **Document ID:** field (StarForth template format)
                                 # Example: **Document ID:** [TICKET-ID] (e.g., CAPA-2025-001, FEATURE-2025-001)
-                                if grep -q '^\*\*Document ID:\*\*' "${doc_path}" 2>/dev/null; then
-                                    DOC_ID_LINE=$(grep '^\*\*Document ID:\*\*' "${doc_path}" | head -1)
+                                if grep -q '^\\*\\*Document ID:\\*\\*' "${doc_path}" 2>/dev/null; then
+                                    DOC_ID_LINE=$(grep '^\\*\\*Document ID:\\*\\*' "${doc_path}" | head -1)
                                     echo "[DEBUG] Found Document ID field: ${DOC_ID_LINE}"
 
                                     # Extract ticket ID from the field
                                     # Look for pattern like CAPA-2025-001 in the line
-                                    if [[ "${DOC_ID_LINE}" =~ \[([A-Z]+)-([0-9]+-[0-9]+)\] ]]; then
+                                    if [[ "${DOC_ID_LINE}" =~ \\[([A-Z]+)-([0-9]+-[0-9]+)\\] ]]; then
                                         DOC_TYPE="${BASH_REMATCH[1]}"
                                         DOC_ID="${BASH_REMATCH[2]}"
                                         DOC_TITLE="${DOC_TYPE}-${DOC_ID}"
@@ -205,11 +205,11 @@ pipeline {
                                 # Example: - [x] **CAPA** (Corrective/Preventive Action)
                                 if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
                                     # Find the Classification section and look for checked boxes
-                                    CLASSIFICATION=$(grep -A 10 '^## Classification' "${doc_path}" 2>/dev/null | grep '\[x\]' | head -1)
+                                    CLASSIFICATION=$(grep -A 10 '^## Classification' "${doc_path}" 2>/dev/null | grep '\\[x\\]' | head -1)
                                     if [ -n "${CLASSIFICATION}" ]; then
                                         echo "[DEBUG] Found checked classification: ${CLASSIFICATION}"
                                         # Extract type from the checked box line
-                                        if [[ "${CLASSIFICATION}" =~ \*\*([A-Z]+)\*\* ]]; then
+                                        if [[ "${CLASSIFICATION}" =~ \\*\\*([A-Z]+)\\*\\* ]]; then
                                             DOC_TYPE="${BASH_REMATCH[1]}"
                                             echo "[DEBUG] Extracted type from Classification checkbox: ${DOC_TYPE}"
                                         fi
@@ -218,7 +218,7 @@ pipeline {
 
                                 # PATTERN 3: Look for **Submitted by:** field for signer info
                                 # Example: **Submitted by:** [Full Name] <[email]>
-                                SUBMITTED_BY=$(grep '^\*\*Submitted by:\*\*' "${doc_path}" 2>/dev/null | head -1 | sed 's/.*\*\*Submitted by:\*\*[[:space:]]*\[//;s/\].*//')
+                                SUBMITTED_BY=$(grep '^\\*\\*Submitted by:\\*\\*' "${doc_path}" 2>/dev/null | head -1 | sed 's/.*\\*\\*Submitted by:\\*\\*[[:space:]]*\\[//;s/\\].*//')
                                 if [ -n "${SUBMITTED_BY}" ]; then
                                     echo "[DEBUG] Found submitter: ${SUBMITTED_BY}"
                                     REQUIRED_SIGNERS="${SUBMITTED_BY}"
