@@ -1,6 +1,9 @@
-// Jenkinsfile.disposition
-// Document Disposition Pipeline - Main Orchestrator
-// Manages the complete lifecycle of documents from in_basket to signed vault
+// Jenkinsfile.disposition - PRODUCTION
+// Document Disposition Pipeline - Pure Groovy Business Logic
+// All file operations, logic, and data processing in Groovy DSL
+// External tools (git, gh) called as needed
+
+@Library('shared-library') _
 
 pipeline {
     agent any
@@ -11,16 +14,6 @@ pipeline {
             defaultValue: false,
             description: 'Dry run mode (no commits/pushes)'
         )
-        string(
-            name: 'PROCESS_DOCUMENT',
-            defaultValue: '',
-            description: 'Process specific document (filename). Leave empty for all.'
-        )
-    }
-
-    triggers {
-        // Poll for changes to in_basket every 15 minutes
-        pollSCM('H/15 * * * *')
     }
 
     options {
@@ -33,13 +26,7 @@ pipeline {
     environment {
         GOVERNANCE_REPO = 'rajames440/StarForth-Governance'
         WORKSPACE_REPO = "${WORKSPACE}"
-        IN_BASKET = "${WORKSPACE_REPO}/in_basket"
-        PENDING = "${WORKSPACE_REPO}/Pending"
-        SEC_LOG = "${WORKSPACE_REPO}/Security/SEC_LOG.adoc"
-        SIGNATURES_FILE = "${WORKSPACE_REPO}/Security/Signatures.adoc"
-        GIT_AUTHOR_NAME = "Disposition Pipeline"
-        GIT_AUTHOR_EMAIL = "disposition@starforth.governance"
-        TIMESTAMP = sh(script: 'date -u +%Y-%m-%dT%H:%M:%SZ', returnStdout: true).trim()
+        TIMESTAMP = new Date().format('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'')
     }
 
     stages {
@@ -51,7 +38,7 @@ pipeline {
                         $class: 'GitSCM',
                         branches: [[name: '*/master']],
                         userRemoteConfigs: [[
-                            url: "https://github.com/${GOVERNANCE_REPO}.git",
+                            url: "https://github.com/${env.GOVERNANCE_REPO}.git",
                             credentialsId: 'github-credentials'
                         ]]
                     ])
@@ -59,489 +46,96 @@ pipeline {
             }
         }
 
-        stage('Scan In_Basket') {
+        stage('Scan & Classify') {
             steps {
                 script {
-                    echo "🔍 Scanning in_basket for new documents..."
+                    echo "🔍 Scanning in_basket and classifying documents..."
 
-                    sh '''
-                        echo "========== SCAN IN_BASKET STAGE =========="
-                        echo "[DEBUG] Current working directory: $(pwd)"
-                        echo "[DEBUG] IN_BASKET variable: ${IN_BASKET}"
+                    try {
+                        // Groovy-based document scanning and classification
+                        def inBasketDir = new File("${env.WORKSPACE}/in_basket")
+                        def metadataDir = new File('/tmp/disposition-metadata')
+                        def hintsDir = new File('/tmp/disposition-hints')
 
-                        cd "${IN_BASKET}"
-                        echo "[DEBUG] Changed to: $(pwd)"
-                        echo "[DEBUG] Directory listing:"
-                        ls -la
-                        echo ""
+                        // Ensure output directories exist
+                        metadataDir.mkdirs()
+                        hintsDir.mkdirs()
 
-                        # Find all documents (not DO_NOT_REMOVE_ME)
-                        echo "[DEBUG] Searching for documents (excluding DO_NOT_REMOVE_ME)..."
-                        DOC_COUNT=$(find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | wc -l)
-                        echo "✓ Found ${DOC_COUNT} document(s) in in_basket"
+                        // Find all documents (exclude DO_NOT_REMOVE_ME)
+                        def documents = inBasketDir.listFiles({ file ->
+                            file.isFile() && file.name != 'DO_NOT_REMOVE_ME'
+                        } as FileFilter)?.sort { it.name } ?: []
 
-                        if [ ${DOC_COUNT} -gt 0 ]; then
-                            echo ""
-                            echo "Documents ready for processing:"
-                            find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort | while read doc; do
-                                echo "  - $(basename "$doc") ($(stat -c%s "$doc" 2>/dev/null || stat -f%z "$doc" 2>/dev/null) bytes)"
-                            done
-                        else
-                            echo "[WARN] No documents found in in_basket"
-                        fi
+                        env.DOC_COUNT = documents.size().toString()
+                        echo "✓ Found ${env.DOC_COUNT} document(s) in in_basket"
 
-                        echo "[DEBUG] Writing DOC_COUNT=${DOC_COUNT} to /tmp/doc_count"
-                        echo "${DOC_COUNT}" > /tmp/doc_count
-                        echo "[DEBUG] Contents of /tmp/doc_count: $(cat /tmp/doc_count)"
-                        echo "========== END SCAN IN_BASKET =========="
-                        echo ""
-                    '''
+                        if (documents.isEmpty()) {
+                            echo "[WARN] No documents to process"
+                            return
+                        }
 
-                    env.DOC_COUNT = readFile('/tmp/doc_count').trim()
-                }
-            }
-        }
-
-        stage('Process Documents') {
-            when {
-                expression { env.DOC_COUNT != "0" }
-            }
-            steps {
-                script {
-                    echo "📦 Processing ${DOC_COUNT} document(s)..."
-
-                    sh '''
-                        cd "${IN_BASKET}"
-
-                        # Process each document
-                        find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort | while read doc; do
-                            doc_name=$(basename "$doc")
+                        // Process each document
+                        documents.each { File docFile ->
+                            String docName = docFile.name
                             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            echo "Processing: ${doc_name}"
+                            echo "Processing: ${docName}"
 
-                            # For now, just log that we found the document
-                            # Full processing logic to be implemented in next stage
-                            echo "  Status: Queued for disposition"
-                        done
-                    '''
-                }
-            }
-        }
+                            try {
+                                // Read document content
+                                String docContent = docFile.text
+                                String docContentLower = docContent.toLowerCase()
 
-        stage('Classify & Extract Metadata') {
-            when {
-                expression { env.DOC_COUNT != "0" }
-            }
-            steps {
-                script {
-                    echo "🔬 Using Claude to classify documents and extract metadata..."
-
-                    sh '''#!/bin/bash
-                        echo "========== CLASSIFY & EXTRACT METADATA =========="
-                        cd "${IN_BASKET}"
-                        echo "[DEBUG] Working directory: $(pwd)"
-
-                        # Create temporary metadata directory
-                        echo "[DEBUG] Creating metadata directory: /tmp/disposition-metadata"
-                        mkdir -p /tmp/disposition-metadata
-                        echo "[DEBUG] Directory created. Contents:"
-                        ls -la /tmp/disposition-metadata
-
-                        # Read each document and use Claude to classify
-                        echo "[DEBUG] Finding documents..."
-                        DOC_FILES=$(find . -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | sort)
-                        FILE_COUNT=$(echo "${DOC_FILES}" | wc -l)
-                        echo "[DEBUG] Found ${FILE_COUNT} document(s)"
-                        echo "${DOC_FILES}"
-
-                        echo "${DOC_FILES}" | while read doc; do
-                            doc_name=$(basename "$doc")
-                            doc_path="${IN_BASKET}/${doc_name}"
-
-                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            echo "Analyzing: ${doc_name}"
-                            echo "[DEBUG] Document path: ${doc_path}"
-                            echo "[DEBUG] File exists: $(test -f "${doc_path}" && echo 'YES' || echo 'NO')"
-                            echo "[DEBUG] File size: $(stat -c%s "${doc_path}" 2>/dev/null || stat -f%z "${doc_path}" 2>/dev/null) bytes"
-
-                            # Determine format from extension
-                            if [[ "${doc_name}" =~ [.]adoc$ ]]; then
-                                FORMAT="asciidoc"
-                            elif [[ "${doc_name}" =~ [.](md|markdown)$ ]]; then
-                                FORMAT="markdown"
-                            elif [[ "${doc_name}" =~ [.]pdf$ ]]; then
-                                FORMAT="pdf"
-                            else
-                                FORMAT="other"
-                            fi
-                            echo "[DEBUG] FORMAT: ${FORMAT}"
-
-                            # Classify document based on CONTENT (not filename)
-                            echo "  → Extracting document type from content..."
-
-                            DOC_TYPE="UNKNOWN"
-                            DOC_TITLE="${doc_name%.*}"
-                            REQUIRED_SIGNERS=""
-
-                            # Try to extract type from document content
-                            if [ "${FORMAT}" = "markdown" ] || [ "${FORMAT}" = "asciidoc" ]; then
-                                # PATTERN 1: Look for **Document ID:** field (StarForth template format)
-                                # Example: **Document ID:** [TICKET-ID] (e.g., CAPA-2025-001, FEATURE-2025-001)
-                                if grep -q '^\\*\\*Document ID:\\*\\*' "${doc_path}" 2>/dev/null; then
-                                    DOC_ID_LINE=$(grep '^\\*\\*Document ID:\\*\\*' "${doc_path}" | head -1)
-                                    echo "[DEBUG] Found Document ID field: ${DOC_ID_LINE}"
-
-                                    # Extract ticket ID from the field
-                                    # Look for pattern like CAPA-2025-001 in the line
-                                    if [[ "${DOC_ID_LINE}" =~ \\[([A-Z]+)-([0-9]+-[0-9]+)\\] ]]; then
-                                        DOC_TYPE="${BASH_REMATCH[1]}"
-                                        DOC_ID="${BASH_REMATCH[2]}"
-                                        DOC_TITLE="${DOC_TYPE}-${DOC_ID}"
-                                        echo "[DEBUG] Extracted type from Document ID: ${DOC_TYPE} (ID: ${DOC_ID})"
-                                    fi
-                                fi
-
-                                # PATTERN 2: Look for checked checkboxes in Classification section
-                                # Example: - [x] **CAPA** (Corrective/Preventive Action)
-                                if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
-                                    # Find the Classification section and look for checked boxes
-                                    CLASSIFICATION=$(grep -A 10 '^## Classification' "${doc_path}" 2>/dev/null | grep '\\[x\\]' | head -1)
-                                    if [ -n "${CLASSIFICATION}" ]; then
-                                        echo "[DEBUG] Found checked classification: ${CLASSIFICATION}"
-                                        # Extract type from the checked box line
-                                        if [[ "${CLASSIFICATION}" =~ \\*\\*([A-Z]+)\\*\\* ]]; then
-                                            DOC_TYPE="${BASH_REMATCH[1]}"
-                                            echo "[DEBUG] Extracted type from Classification checkbox: ${DOC_TYPE}"
-                                        fi
-                                    fi
-                                fi
-
-                                # PATTERN 3: Look for **Submitted by:** field for signer info
-                                # Example: **Submitted by:** [Full Name] <[email]>
-                                SUBMITTED_BY=$(grep '^\\*\\*Submitted by:\\*\\*' "${doc_path}" 2>/dev/null | head -1 | sed 's/.*\\*\\*Submitted by:\\*\\*[[:space:]]*\\[//;s/\\].*//')
-                                if [ -n "${SUBMITTED_BY}" ]; then
-                                    echo "[DEBUG] Found submitter: ${SUBMITTED_BY}"
-                                    REQUIRED_SIGNERS="${SUBMITTED_BY}"
-                                fi
-
-                                # PATTERN 4: Look for main title/heading
-                                if [ "${FORMAT}" = "markdown" ]; then
-                                    # For markdown: # TITLE or **TITLE**
-                                    TITLE_LINE=$(grep "^#" "${doc_path}" 2>/dev/null | head -1 | sed 's/^#+[[:space:]]*//')
-                                    if [ -n "${TITLE_LINE}" ]; then
-                                        DOC_TITLE="${TITLE_LINE}"
-                                        echo "[DEBUG] Extracted title from heading: ${DOC_TITLE}"
-                                    fi
-                                fi
-
-                                # PATTERN 5: Fallback - look for governance keywords in content
-                                if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
-                                    if grep -qi "failure.*mode.*effects\\|FMEA" "${doc_path}" 2>/dev/null; then
-                                        DOC_TYPE="FMEA"
-                                        echo "[DEBUG] Inferred type from content: FMEA"
-                                    elif grep -qi "engineering.*change.*request\\|ECR" "${doc_path}" 2>/dev/null; then
-                                        DOC_TYPE="ECR"
-                                        echo "[DEBUG] Inferred type from content: ECR"
-                                    elif grep -qi "engineering.*change.*order\\|ECO" "${doc_path}" 2>/dev/null; then
-                                        DOC_TYPE="ECO"
-                                        echo "[DEBUG] Inferred type from content: ECO"
-                                    elif grep -qi "corrective.*preventive\\|CAPA" "${doc_path}" 2>/dev/null; then
-                                        DOC_TYPE="CAPA"
-                                        echo "[DEBUG] Inferred type from content: CAPA"
-                                    fi
-                                fi
-                            fi
-
-                            # FALLBACK: Try filename pattern as absolute last resort
-                            if [ "${DOC_TYPE}" = "UNKNOWN" ]; then
-                                if [[ "${doc_name}" =~ ^([A-Z]+)-[0-9]+ ]]; then
-                                    DOC_TYPE="${BASH_REMATCH[1]}"
-                                    echo "[DEBUG] Fallback: Extracted type from filename: ${DOC_TYPE}"
-                                else
-                                    echo "[WARN] Could not determine document type - continuing with UNKNOWN"
-                                    DOC_TYPE="UNKNOWN"
-                                fi
-                            fi
-
-                            # Default signer if none found in document
-                            if [ -z "${REQUIRED_SIGNERS}" ]; then
-                                REQUIRED_SIGNERS="rajames440"
-                                echo "[DEBUG] Using default signer: rajames440"
-                            fi
-
-                            # Create metadata JSON with simple classification
-                            echo "[DEBUG] Creating metadata file: /tmp/disposition-metadata/${doc_name}.json"
-
-                            # Build JSON array for signers
-                            SIGNERS_JSON="[]"
-                            if [ -n "${REQUIRED_SIGNERS}" ]; then
-                                # Convert space/comma-separated list to JSON array
-                                SIGNERS_JSON=$(echo "${REQUIRED_SIGNERS}" | tr ',' '\n' | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s . 2>/dev/null || echo "[\"${REQUIRED_SIGNERS}\"]")
-                            fi
-
-                            cat > "/tmp/disposition-metadata/${doc_name}.json" << METADATA
-{
-  "type": "${DOC_TYPE}",
-  "title": "${DOC_TITLE}",
-  "required_signers": ${SIGNERS_JSON},
-  "format": "${FORMAT}",
-  "needs_conversion": false
-}
-METADATA
-
-                            # Display results
-                            if [ -f "/tmp/disposition-metadata/${doc_name}.json" ]; then
-                                echo "[DEBUG] Metadata file created successfully"
-                                echo "[DEBUG] Metadata file contents:"
-                                cat "/tmp/disposition-metadata/${doc_name}.json"
-
-                                DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "/tmp/disposition-metadata/${doc_name}.json")
-                                DOC_TITLE=$(jq -r '.title // ""' "/tmp/disposition-metadata/${doc_name}.json")
-                                SIGNERS=$(jq -r '.required_signers // []' "/tmp/disposition-metadata/${doc_name}.json")
-
-                                echo "  Type: ${DOC_TYPE}"
-                                echo "  Title: ${DOC_TITLE}"
-                                echo "  Signers Required: ${SIGNERS}"
-                            else
-                                echo "[ERROR] Failed to create metadata file!"
-                            fi
-                        done
-
-                        echo ""
-                        echo "[DEBUG] All metadata files created:"
-                        ls -la /tmp/disposition-metadata/
-                        echo "========== END CLASSIFY & EXTRACT METADATA =========="
-                        echo ""
-                    '''
-                }
-            }
-        }
-
-        stage('Extract Quality & Governance Keywords') {
-            when {
-                expression { env.DOC_COUNT != "0" }
-            }
-            steps {
-                script {
-                    echo "🔍 Extracting quality & governance keywords and disposition hints..."
-
-                    sh '''#!/bin/bash
-                        echo "========== EXTRACT QUALITY & GOVERNANCE KEYWORDS =========="
-                        cd "${WORKSPACE_REPO}"
-
-                        KEYWORDS_FILE="${WORKSPACE_REPO}/keywords.txt"
-
-                        if [ ! -f "${KEYWORDS_FILE}" ]; then
-                            echo "[WARN] Keywords file not found at ${KEYWORDS_FILE}"
-                            echo "[DEBUG] Skipping keyword extraction stage"
-                            echo "========== END EXTRACT KEYWORDS =========="
-                            exit 0
-                        fi
-
-                        echo "[DEBUG] Keywords file found: ${KEYWORDS_FILE}"
-                        mkdir -p /tmp/disposition-hints
-
-                        # Process each document with keyword extraction
-                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
-                            doc_name=$(basename "${metadata_file}" .json)
-                            doc_path="${IN_BASKET}/${doc_name}"
-
-                            if [ ! -f "${doc_path}" ]; then
-                                echo "[WARN] Document not found: ${doc_name}"
-                                continue
-                            fi
-
-                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            echo "Scanning: ${doc_name}"
-
-                            # Read document content (lowercased for case-insensitive matching)
-                            DOC_CONTENT=$(cat "${doc_path}" | tr '[:upper:]' '[:lower:]')
-
-                            # Initialize disposition hints for this document
-                            ESCALATE="false"
-                            PM_REQUIRED="false"
-                            HOLD_IF_FOUND="false"
-                            ADDITIONAL_SIGNERS=""
-                            FOUND_CATEGORIES=""
-
-                            # Parse keywords file and check each category
-                            while IFS='|' read -r category keywords_str escalate_hint pm_hint hold_hint route_hint; do
-                                # Skip comments and empty lines
-                                [[ "${category}" =~ ^# ]] && continue
-                                [ -z "${category}" ] && continue
-
-                                echo "  Checking category: ${category}"
-
-                                # Split keywords by comma
-                                FOUND_IN_CATEGORY=0
-                                IFS=',' read -ra KEYWORD_ARRAY <<< "${keywords_str}"
-
-                                for keyword in "${KEYWORD_ARRAY[@]}"; do
-                                    keyword=$(echo "${keyword}" | xargs) # trim whitespace
-
-                                    # Case-insensitive search
-                                    if echo "${DOC_CONTENT}" | grep -qi "${keyword}"; then
-                                        echo "    ✓ Found: ${keyword}"
-                                        FOUND_IN_CATEGORY=1
-                                    fi
-                                done
-
-                                # If keywords found, apply disposition hints
-                                if [ ${FOUND_IN_CATEGORY} -eq 1 ]; then
-                                    echo "  → ${category}: applying disposition hints"
-                                    FOUND_CATEGORIES="${FOUND_CATEGORIES}${category};"
-
-                                    # Parse hint values
-                                    escalate_hint=$(echo "${escalate_hint}" | xargs)
-                                    pm_hint=$(echo "${pm_hint}" | xargs)
-                                    hold_hint=$(echo "${hold_hint}" | xargs)
-                                    route_hint=$(echo "${route_hint}" | xargs)
-
-                                    # Apply hints (true = activate hint)
-                                    if [ "${escalate_hint}" = "true" ]; then
-                                        ESCALATE="true"
-                                        echo "    → ESCALATE: true"
-                                    fi
-                                    if [ "${pm_hint}" = "true" ]; then
-                                        PM_REQUIRED="true"
-                                        echo "    → PM_REQUIRED: true"
-                                    fi
-                                    if [ "${hold_hint}" = "true" ]; then
-                                        HOLD_IF_FOUND="true"
-                                        echo "    → HOLD_IF_FOUND: true"
-                                    fi
-                                    if [ -n "${route_hint}" ] && [ "${route_hint}" != "" ]; then
-                                        if [ -z "${ADDITIONAL_SIGNERS}" ]; then
-                                            ADDITIONAL_SIGNERS="${route_hint}"
-                                        else
-                                            ADDITIONAL_SIGNERS="${ADDITIONAL_SIGNERS},${route_hint}"
-                                        fi
-                                        echo "    → ADDITIONAL_SIGNERS: ${route_hint}"
-                                    fi
-                                fi
-
-                            done < "${KEYWORDS_FILE}"
-
-                            # Create disposition hints file for this document
-                            HINTS_FILE="/tmp/disposition-hints/${doc_name}.hints"
-                            cat > "${HINTS_FILE}" << HINTS
-{
-  "escalate": ${ESCALATE},
-  "pm_required": ${PM_REQUIRED},
-  "hold_if_found": ${HOLD_IF_FOUND},
-  "additional_signers": "${ADDITIONAL_SIGNERS}",
-  "found_categories": "${FOUND_CATEGORIES}"
-}
-HINTS
-
-                            echo "  ✓ Hints created for: ${doc_name}"
-                        done
-
-                        echo ""
-                        echo "[DEBUG] Keyword extraction and hints creation completed"
-                        echo "========== END EXTRACT KEYWORDS =========="
-                    '''
-                }
-            }
-        }
-
-        stage('Verify Git Status') {
-            steps {
-                script {
-                    echo "✓ Verifying git status..."
-
-                    sh '''
-                        cd "${WORKSPACE_REPO}"
-
-                        # Check git config
-                        echo "Git configuration:"
-                        git config user.name || echo "  user.name not set"
-                        git config user.email || echo "  user.email not set"
-
-                        # Show current branch
-                        echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
-
-                        # Show status
-                        echo "Status:"
-                        git status --short | head -20
-                    '''
-                }
-            }
-        }
-
-        stage('Convert Formats & Add Signatures') {
-            when {
-                expression { env.DOC_COUNT != "0" }
-            }
-            steps {
-                script {
-                    echo "🔄 Converting formats to AsciiDoc and adding signature blocks..."
-
-                    sh '''#!/bin/bash
-                        cd "${IN_BASKET}"
-
-                        # Process each document metadata
-                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
-                            doc_name=$(basename "${metadata_file}" .json)
-                            doc_path="${IN_BASKET}/${doc_name}"
-                            metadata=$(cat "${metadata_file}")
-
-                            echo "Processing metadata for: ${doc_name}"
-
-                            # Check if format conversion needed
-                            NEEDS_CONVERSION=$(echo "${metadata}" | jq -r '.needs_conversion // false')
-                            FORMAT=$(echo "${metadata}" | jq -r '.format // "unknown"')
-                            DOC_TYPE=$(echo "${metadata}" | jq -r '.type // "UNKNOWN"')
-
-                            if [ "${NEEDS_CONVERSION}" = "true" ] && [ "${FORMAT}" != "asciidoc" ]; then
-                                echo "  → Converting from ${FORMAT} to AsciiDoc..."
-
-                                # Use Claude to convert document format
-                                DOC_CONTENT=$(cat "${doc_path}")
-                                claude --print "Convert this ${FORMAT} document to AsciiDoc format. Preserve all content, structure, and meaning. Output ONLY the AsciiDoc content, no explanations.
-
-\\${DOC_CONTENT}" \
-                                    > "${doc_path}.asciidoc" 2>&1 || {
-                                    echo "  ⚠️ Conversion failed for ${doc_name}"
-                                    continue
+                                // Determine format
+                                String format = 'other'
+                                if (docName.endsWith('.adoc') || docName.endsWith('.asciidoc')) {
+                                    format = 'asciidoc'
+                                } else if (docName.endsWith('.md') || docName.endsWith('.markdown')) {
+                                    format = 'markdown'
+                                } else if (docName.endsWith('.pdf')) {
+                                    format = 'pdf'
                                 }
 
-                                # Replace original with converted version
-                                mv "${doc_path}.asciidoc" "${doc_path}"
-                                echo "  ✓ Converted to AsciiDoc"
-                            fi
+                                // Extract document type from content (multiple patterns)
+                                String docType = extractDocumentType(docContent, docContentLower, docName, format)
+                                String docTitle = extractDocumentTitle(docContent, docName, format)
+                                List<String> requiredSigners = extractSigners(docContent, docContentLower)
 
-                            # Add signature block if controlled document (use bash, not Claude)
-                            if [[ ! "${DOC_TYPE}" =~ ^(ART|MIN|REL|RMP)$ ]]; then
-                                echo "  → Adding signature block..."
+                                echo "  Type: ${docType}"
+                                echo "  Title: ${docTitle}"
+                                echo "  Signers: ${requiredSigners.join(', ')}"
 
-                                # Build signature rows from metadata
-                                SIGNERS=$(echo "${metadata}" | jq -r '.required_signers[]')
-                                SIGNER_ROWS=""
-                                while IFS= read -r signer; do
-                                    SIGNER_ROWS="${SIGNER_ROWS}| ${signer} | Pending |  |
-"
-                                done <<< "${SIGNERS}"
+                                // Create metadata file
+                                Map metadata = [
+                                    type: docType,
+                                    title: docTitle,
+                                    required_signers: requiredSigners,
+                                    format: format,
+                                    needs_conversion: format != 'asciidoc'
+                                ]
 
-                                # Append signature block to document (simple bash append, no Claude)
-                                cat >> "${doc_path}" << SIGBLOCK
+                                File metadataFile = new File(metadataDir, "${docName}.json")
+                                metadataFile.text = groovy.json.JsonOutput.prettyPrint(
+                                    groovy.json.JsonOutput.toJson(metadata)
+                                )
 
-== Signatures
+                                // Extract quality & governance keywords
+                                Map hints = extractKeywordHints(docContentLower)
+                                File hintsFile = new File(hintsDir, "${docName}.hints")
+                                hintsFile.text = groovy.json.JsonOutput.prettyPrint(
+                                    groovy.json.JsonOutput.toJson(hints)
+                                )
 
-|===
-| Signer | Status | Date | Signature
+                                echo "  ✓ Metadata and hints created"
 
-${SIGNER_ROWS}|===
-SIGBLOCK
+                            } catch (Exception e) {
+                                echo "  ❌ Failed to process: ${e.message}"
+                            }
+                        }
 
-                                if [ $? -eq 0 ]; then
-                                    echo "  ✓ Signature block added"
-                                else
-                                    echo "  ⚠️ Signature block addition failed"
-                                fi
-                            fi
-                        done
-                    '''
+                    } catch (Exception e) {
+                        echo "❌ CRITICAL ERROR in Scan & Classify: ${e.message}"
+                        throw e
+                    }
                 }
             }
         }
@@ -552,228 +146,90 @@ SIGBLOCK
             }
             steps {
                 script {
-                    echo "📂 Routing processed documents to Pending/[TYPE]/ directories (Groovy DSL)..."
+                    echo "📂 Routing documents to Pending/[TYPE]/ directories..."
 
                     try {
-                        // Define base paths in Groovy
-                        def workspaceDir = new File(env.WORKSPACE)
-                        def inBasketDir = new File(env.WORKSPACE, 'in_basket')
-                        def pendingDir = new File(env.WORKSPACE, 'Pending')
+                        def inBasketDir = new File("${env.WORKSPACE}/in_basket")
+                        def pendingDir = new File("${env.WORKSPACE}/Pending")
                         def metadataDir = new File('/tmp/disposition-metadata')
                         def hintsDir = new File('/tmp/disposition-hints')
 
-                        echo "[DEBUG] Workspace: ${workspaceDir.absolutePath}"
-                        echo "[DEBUG] In_Basket: ${inBasketDir.absolutePath}"
-                        echo "[DEBUG] Pending: ${pendingDir.absolutePath}"
-
-                        // Ensure Pending directory exists
                         pendingDir.mkdirs()
-                        echo "[DEBUG] Pending directory ready: ${pendingDir.exists()}"
 
-                        // Get all metadata files
                         def metadataFiles = metadataDir.listFiles({ file ->
                             file.name.endsWith('.json')
-                        } as FileFilter)?.sort { it.name }
-
-                        if (!metadataFiles) {
-                            echo "[WARN] No metadata files found"
-                            return
-                        }
+                        } as FileFilter)?.sort { it.name } ?: []
 
                         int routed = 0
                         int failed = 0
-                        def total = metadataFiles.size()
 
-                        echo "\\n[DEBUG] Processing ${total} metadata files\\n"
-
-                        metadataFiles.each { metadataFile ->
+                        metadataFiles.each { File metadataFile ->
                             String docName = metadataFile.name.replaceAll('\\.json$', '')
                             File docPath = new File(inBasketDir, docName)
 
-                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                             echo "Processing: ${docName}"
-                            echo "[DEBUG] Metadata file: ${metadataFile.absolutePath}"
-                            echo "[DEBUG] Document path: ${docPath.absolutePath}"
 
-                            // Check if document exists
-                            if (!docPath.exists()) {
-                                echo "  ⚠️ Document not found in in_basket (may already be routed)"
-                                echo "[DEBUG] File exists check: false"
-                                return
-                            }
-                            echo "[DEBUG] Document file exists: true (size: ${docPath.size()} bytes)"
-
-                            // Parse metadata JSON using Groovy
                             try {
+                                if (!docPath.exists()) {
+                                    echo "  ⚠️ Document not found (may be already routed)"
+                                    return
+                                }
+
+                                // Parse metadata
                                 def metadata = new groovy.json.JsonSlurper().parse(metadataFile)
                                 String docType = metadata.get('type', 'UNKNOWN')
-                                String docTitle = metadata.get('title', docName.replaceAll('\\.[^.]+$', ''))
 
-                                echo "[DEBUG] Metadata parsed successfully"
-                                echo "[DEBUG] DOC_TYPE: ${docType}"
-                                echo "[DEBUG] DOC_TITLE: ${docTitle}"
-                                echo "  Type: ${docType}"
-                                echo "  Title: ${docTitle}"
-
-                                // Create type-specific pending directory
+                                // Create pending directory
                                 File pendingTypeDir = new File(pendingDir, docType)
-                                echo "[DEBUG] Creating directory: ${pendingTypeDir.absolutePath}"
-                                if (!pendingTypeDir.mkdirs()) {
-                                    echo "  ❌ Failed to create directory: ${pendingTypeDir.absolutePath}"
-                                    echo "[DEBUG] mkdirs returned false"
-                                    failed++
-                                    return
-                                }
-                                echo "[DEBUG] Directory created/verified"
+                                pendingTypeDir.mkdirs()
 
-                                // Move document to Pending directory
+                                // Add signature block if needed
+                                if (!['ART', 'MIN', 'REL', 'RMP'].contains(docType)) {
+                                    String sigBlock = buildSignatureBlock(metadata)
+                                    docPath.append('\n' + sigBlock)
+                                    echo "  ✓ Signature block added"
+                                }
+
+                                // Move document
                                 File destFile = new File(pendingTypeDir, docName)
-                                echo "[DEBUG] Moving document: ${docPath.absolutePath} -> ${destFile.absolutePath}"
+                                if (docPath.renameTo(destFile)) {
+                                    echo "  ✓ Routed to Pending/${docType}/"
+                                    routed++
 
-                                if (!docPath.renameTo(destFile)) {
-                                    echo "  ❌ Failed to move document to ${pendingTypeDir.absolutePath}"
-                                    echo "[DEBUG] renameTo returned false"
-                                    failed++
-                                    return
-                                }
-                                echo "[DEBUG] Document moved successfully"
-
-                                // Verify the file was moved
-                                if (!destFile.exists()) {
-                                    echo "  ❌ File move verification failed"
-                                    echo "[DEBUG] File not found at destination: ${destFile.absolutePath}"
-                                    failed++
-                                    return
-                                }
-                                echo "[DEBUG] File verified at destination (size: ${destFile.size()} bytes)"
-
-                                // Check for disposition hints
-                                File hintsFile = new File(hintsDir, "${docName}.hints")
-                                echo "[DEBUG] Checking hints file: ${hintsFile.absolutePath}"
-
-                                if (hintsFile.exists()) {
-                                    try {
+                                    // Check hints
+                                    File hintsFile = new File(hintsDir, "${docName}.hints")
+                                    if (hintsFile.exists()) {
                                         def hints = new groovy.json.JsonSlurper().parse(hintsFile)
-                                        boolean holdFlag = hints.get('hold_if_found', false)
-                                        boolean escalateFlag = hints.get('escalate', false)
-                                        boolean pmRequired = hints.get('pm_required', false)
-                                        String additionalSigners = hints.get('additional_signers', '')
-                                        String foundCats = hints.get('found_categories', '')
-
-                                        echo "[DEBUG] Hints parsed successfully"
-                                        echo "[DEBUG] HOLD_FLAG: ${holdFlag}"
-                                        echo "[DEBUG] ESCALATE_FLAG: ${escalateFlag}"
-                                        echo "[DEBUG] PM_REQUIRED: ${pmRequired}"
-                                        echo "[DEBUG] ADDITIONAL_SIGNERS: ${additionalSigners}"
-                                        echo "[DEBUG] FOUND_CATS: ${foundCats}"
-
-                                        if (holdFlag) {
-                                            echo "  ⚠️ HOLD FLAG SET: Document held for review (TODOs/FIXMEs found)"
-                                            File holdTypeDir = new File(env.WORKSPACE, "Hold/${docType}")
-                                            holdTypeDir.mkdirs()
-                                            File holdDestFile = new File(holdTypeDir, docName)
-                                            echo "[DEBUG] Moving to Hold: ${destFile.absolutePath} -> ${holdDestFile.absolutePath}"
-                                            if (destFile.renameTo(holdDestFile)) {
-                                                echo "  → Moved to Hold/${docType}/ pending review"
-                                            } else {
-                                                echo "  ❌ Failed to move to Hold directory"
+                                        if (hints.hold_if_found) {
+                                            File holdDir = new File("${env.WORKSPACE}/Hold", docType)
+                                            holdDir.mkdirs()
+                                            File holdDest = new File(holdDir, docName)
+                                            if (destFile.renameTo(holdDest)) {
+                                                echo "  ⚠️ HOLD: Document moved to Hold/${docType}/"
                                             }
                                         }
-
-                                        if (escalateFlag) {
-                                            echo "  🚨 ESCALATION: Document will be escalated to PM (urgent/blocker found)"
+                                        if (hints.escalate) {
+                                            echo "  🚨 ESCALATE: PM escalation flagged"
                                         }
-
-                                        if (pmRequired) {
-                                            echo "  ⭐ PM_REQUIRED: Document needs PM signature/approval"
-                                        }
-
-                                        if (additionalSigners) {
-                                            echo "  👥 ADDITIONAL SIGNERS: ${additionalSigners}"
-                                        }
-
-                                        if (foundCats) {
-                                            echo "  🏷️  Categories found: ${foundCats}"
-                                        }
-
-                                    } catch (Exception e) {
-                                        echo "[WARN] Failed to parse hints file: ${e.message}"
                                     }
                                 } else {
-                                    echo "[DEBUG] No hints file found"
+                                    echo "  ❌ Failed to move document"
+                                    failed++
                                 }
 
-                                echo "  ✓ Successfully routed"
-                                routed++
-
                             } catch (Exception e) {
-                                echo "  ❌ Failed to parse metadata: ${e.message}"
-                                echo "[DEBUG] Exception: ${e}"
+                                echo "  ❌ Error: ${e.message}"
                                 failed++
                             }
                         }
 
                         echo ""
-                        echo "Routing Summary:"
-                        echo "  Successfully routed: ${routed}/${total}"
-                        if (failed > 0) {
-                            echo "  Failed: ${failed}/${total}"
-                        }
-                        echo "[DEBUG] Route to Pending stage completed"
+                        echo "Routing Summary: ${routed} routed, ${failed} failed"
 
                     } catch (Exception e) {
-                        echo "❌ CRITICAL ERROR in Route to Pending stage: ${e.message}"
-                        echo "[DEBUG] Stack trace: ${e}"
+                        echo "❌ CRITICAL ERROR in Route to Pending: ${e.message}"
                         throw e
                     }
-                }
-            }
-        }
-
-        stage('Clean in_basket') {
-            when {
-                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
-            }
-            steps {
-                script {
-                    echo "🗑️ Removing processed documents from in_basket..."
-
-                    sh '''
-                        echo "========== CLEAN IN_BASKET STAGE =========="
-                        cd "${WORKSPACE_REPO}"
-                        echo "[DEBUG] Current working directory: $(pwd)"
-
-                        # Remove successfully routed documents from in_basket
-                        echo "[DEBUG] Finding processed documents to remove..."
-                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
-                            doc_name=$(basename "${metadata_file}" .json)
-                            doc_path="${IN_BASKET}/${doc_name}"
-
-                            # Only remove if document no longer exists in in_basket
-                            # (successfully moved to Pending)
-                            if [ ! -f "${doc_path}" ]; then
-                                echo "✓ ${doc_name} already removed from in_basket"
-                            else
-                                # Document still in in_basket - remove it
-                                echo "Removing: ${doc_name}"
-                                rm -f "${doc_path}"
-
-                                # Verify removal
-                                if [ ! -f "${doc_path}" ]; then
-                                    echo "  ✓ Successfully removed from in_basket"
-                                else
-                                    echo "  ⚠️ Failed to remove (permission issue?)"
-                                fi
-                            fi
-                        done
-
-                        echo ""
-                        echo "Documents remaining in in_basket:"
-                        find "${IN_BASKET}" -maxdepth 1 -type f ! -name "DO_NOT_REMOVE_ME" | wc -l
-
-                        echo "[DEBUG] Clean in_basket stage completed"
-                        echo "========== END CLEAN IN_BASKET STAGE =========="
-                    '''
                 }
             }
         }
@@ -784,65 +240,46 @@ SIGBLOCK
             }
             steps {
                 script {
-                    echo "🌿 Creating feature branch for document processing..."
-
+                    echo "🌿 Creating feature branch..."
                     sh '''
-                        echo "========== CREATE FEATURE BRANCH =========="
                         cd "${WORKSPACE_REPO}"
-                        echo "[DEBUG] Working directory: $(pwd)"
-                        echo "[DEBUG] Current branch before: $(git rev-parse --abbrev-ref HEAD)"
-
-                        # Create a single branch for this disposition batch
+                        git config user.name "Disposition Pipeline"
+                        git config user.email "disposition@starforth.governance"
                         BRANCH_NAME="doc/disposition-$(date +%s)"
-                        echo "[DEBUG] Creating new branch: ${BRANCH_NAME}"
-
                         git checkout -b "${BRANCH_NAME}"
-                        echo "✓ Created branch: ${BRANCH_NAME}"
-                        echo "[DEBUG] Current branch after: $(git rev-parse --abbrev-ref HEAD)"
                         echo "${BRANCH_NAME}" > /tmp/branch_name
-                        echo "[DEBUG] Wrote BRANCH_NAME to /tmp/branch_name: $(cat /tmp/branch_name)"
-                        echo "========== END CREATE FEATURE BRANCH =========="
                     '''
-
                     env.BRANCH_NAME = readFile('/tmp/branch_name').trim()
-                    echo "[GROOVY] env.BRANCH_NAME set to: ${env.BRANCH_NAME}"
+                    echo "✓ Branch: ${env.BRANCH_NAME}"
                 }
             }
         }
 
-        stage('Create Routing PR (PR #1)') {
+        stage('Commit & Push') {
             when {
                 expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
             }
             steps {
                 script {
-                    echo "📋 Creating internal PR #1: Document routing to Pending/..."
+                    echo "💾 Committing and pushing changes..."
 
                     sh '''
                         cd "${WORKSPACE_REPO}"
+                        git add Pending/ Hold/ Security/ || true
 
-                        # Set git configuration for commits
-                        git config user.name "${GIT_AUTHOR_NAME}"
-                        git config user.email "${GIT_AUTHOR_EMAIL}"
-
-                        # Stage all Pending directory changes
-                        git add Pending/
-
-                        # Check if there are changes to commit
-                        if git diff --cached --quiet; then
-                            echo "ℹ️ No changes to commit (DRY_RUN or no documents routed)"
-                        else
-                            # Create commit with timestamp
+                        if ! git diff --cached --quiet; then
                             git commit -m "docs(disposition): Route ${DOC_COUNT} document(s) to Pending/
 
-- Processing timestamp: ${TIMESTAMP}
-- Documents ready for signature collection
-- PR #1 of 4: Initial routing to workflow
+- Timestamp: ${TIMESTAMP}
+- Branch: ${BRANCH_NAME}
+- Documents classified and routed for signature collection
 
 [Disposition Pipeline]"
 
-                            echo "✓ PR #1 commit created: $(git rev-parse --short HEAD)"
-                            git log --oneline -1
+                            git push -u origin "${BRANCH_NAME}"
+                            echo "✓ Changes pushed"
+                        else
+                            echo "ℹ️ No changes to commit"
                         fi
                     '''
                 }
@@ -855,155 +292,112 @@ SIGBLOCK
             }
             steps {
                 script {
-                    echo "📧 Notifying required signers via GitHub..."
+                    echo "📧 Notifying signers via GitHub..."
 
-                    sh '''
-                        cd "${WORKSPACE_REPO}"
+                    try {
+                        def metadataDir = new File('/tmp/disposition-metadata')
+                        def metadataFiles = metadataDir.listFiles({ file ->
+                            file.name.endsWith('.json')
+                        } as FileFilter) ?: []
 
-                        # Process each document to identify signers
-                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
-                            doc_name=$(basename "${metadata_file}" .json)
+                        metadataFiles.each { File mf ->
+                            def metadata = new groovy.json.JsonSlurper().parse(mf)
+                            String docName = mf.name.replaceAll('\\.json$', '')
+                            String docType = metadata.type
+                            String docTitle = metadata.title
+                            List signers = metadata.required_signers ?: []
 
-                            # Extract signers from metadata
-                            SIGNERS=$(jq -r '.required_signers[]?' "${metadata_file}")
-                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}")
-                            DOC_TYPE=$(jq -r '.type // "UNKNOWN"' "${metadata_file}")
+                            if (signers.isEmpty()) return
 
-                            if [ -z "${SIGNERS}" ]; then
-                                echo "ℹ️ No signers required for: ${doc_name}"
-                                continue
-                            fi
+                            echo "Creating GitHub issue for: ${docName}"
 
-                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            echo "📢 Notifying signers for: ${doc_name}"
-                            echo "   Title: ${DOC_TITLE}"
-                            echo "   Type: ${DOC_TYPE}"
-                            echo "   Signers:"
+                            String issueBody = """Document pending signature collection.
 
-                            # Build list of signers with @ mentions
-                            SIGNER_MENTIONS=""
-                            echo "${SIGNERS}" | while read signer; do
-                                echo "     - ${signer}"
-                                SIGNER_MENTIONS="${SIGNER_MENTIONS}@${signer} "
-                            done
+**Document:** ${docName}
+**Type:** ${docType}
+**Title:** ${docTitle}
 
-                            # Create GitHub issue notification
-                            if command -v gh &> /dev/null; then
-                                echo "  → Creating GitHub issue notification..."
-
-                                # Build signer list for the issue
-                                SIGNERS_LIST=$(echo "${SIGNERS}" | sed 's/^/- @/')
-
-                                # Write issue body to temp file (pure bash, no Groovy parsing)
-                                cat > /tmp/issue_body.txt << 'ISSUE_EOF'
-Document pending signature collection.
-
-**Document:** [DOCUMENT_NAME_PLACEHOLDER]
-**Type:** DOCUMENT_TYPE_PLACEHOLDER
-**Title:** DOCUMENT_TITLE_PLACEHOLDER
-
-**Required Signers:**
-SIGNERS_PLACEHOLDER
+**Required Signers:** ${signers.join(', ')}
 
 **Action Required:**
-1. Review document in Pending/DOCUMENT_TYPE_PLACEHOLDER/DOCUMENT_NAME_PLACEHOLDER
-2. Sign with GPG: gpg --detach-sign --armor DOCUMENT_NAME_PLACEHOLDER
-3. Create detached signature: DOCUMENT_NAME_PLACEHOLDER.[your-username].asc
-4. Commit to repository or notify pipeline
+1. Review document in Pending/${docType}/${docName}
+2. Sign with GPG: gpg --detach-sign --armor ${docName}
+3. Create signature: ${docName}.[your-username].asc
+4. Commit and push
 
 **Timeline:**
-- Day 1: Reminder notification
-- Day 3: PM escalation if not signed
+- Day 1: Reminder
+- Day 3: PM escalation
 
-Created: TIMESTAMP_PLACEHOLDER
-Branch: BRANCH_PLACEHOLDER
-ISSUE_EOF
+Created: ${env.TIMESTAMP}
+Branch: ${env.BRANCH_NAME}"""
 
-                                # Replace placeholders with actual values using bash
-                                sed -i "s|DOCUMENT_NAME_PLACEHOLDER|${doc_name}|g" /tmp/issue_body.txt
-                                sed -i "s|DOCUMENT_TYPE_PLACEHOLDER|${DOC_TYPE}|g" /tmp/issue_body.txt
-                                sed -i "s|DOCUMENT_TITLE_PLACEHOLDER|${DOC_TITLE}|g" /tmp/issue_body.txt
-                                sed -i "s|SIGNERS_PLACEHOLDER|${SIGNERS_LIST}|g" /tmp/issue_body.txt
-                                sed -i "s|TIMESTAMP_PLACEHOLDER|${TIMESTAMP}|g" /tmp/issue_body.txt
-                                sed -i "s|BRANCH_PLACEHOLDER|${BRANCH_NAME}|g" /tmp/issue_body.txt
+                            sh """
+                                cd "${env.WORKSPACE_REPO}"
+                                gh issue create \\
+                                  --title "📋 Document Pending Signature: ${docName}" \\
+                                  --body "${issueBody.replace('"', '\\"')}" \\
+                                  --label "governance,signature-needed" \\
+                                  --assignee ${signers.join(',')} 2>/dev/null || echo "⚠️ Issue creation failed"
+                            """
+                        }
 
-                                # Read the file into a variable
-                                ISSUE_BODY=$(cat /tmp/issue_body.txt)
-
-                                gh issue create \
-                                  --title "📋 Document Pending Signature: ${doc_name}" \
-                                  --body "${ISSUE_BODY}" \
-                                  --label "governance,signature-needed" \
-                                  --assignee ${SIGNERS} 2>&1 || {
-                                    echo "  ⚠️ GitHub issue creation may have failed (check below)"
-                                }
-
-                                echo "  ✓ GitHub issue created and signers assigned"
-                            else
-                                echo "  ⚠️ gh CLI not available, falling back to notification log"
-                                echo "[NOTIFY] GitHub Issue: ${doc_name}" >> /tmp/notification-log
-                                echo "${SIGNERS}" | while read signer; do
-                                    echo "[NOTIFY] @${signer}: Please sign ${doc_name}" >> /tmp/notification-log
-                                done
-                            fi
-                        done
-
-                        # Summary
-                        if [ -f /tmp/notification-log ]; then
-                            echo ""
-                            echo "Notification Summary:"
-                            cat /tmp/notification-log
-                        fi
-                    '''
+                    } catch (Exception e) {
+                        echo "⚠️ Notification error (non-blocking): ${e.message}"
+                    }
                 }
             }
         }
 
-        stage('Setup Escalation Tracking') {
+        stage('Setup Escalation') {
             when {
                 expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
             }
             steps {
                 script {
-                    echo "⏰ Setting up escalation tracking for pending documents..."
+                    echo "⏰ Setting up escalation tracking..."
 
-                    sh '''
-                        # Create escalation tracking directory
-                        mkdir -p "${WORKSPACE_REPO}/Security/Escalations"
+                    try {
+                        def metadataDir = new File('/tmp/disposition-metadata')
+                        def escalationDir = new File("${env.WORKSPACE}/Security/Escalations")
+                        escalationDir.mkdirs()
 
-                        # Process each document
-                        find /tmp/disposition-metadata -name "*.json" | sort | while read metadata_file; do
-                            doc_name=$(basename "${metadata_file}" .json)
-                            DOC_TITLE=$(jq -r '.title // ""' "${metadata_file}")
-                            DOC_TYPE=$(jq -r '.type // ""' "${metadata_file}")
-                            SIGNERS=$(jq -r '.required_signers[]?' "${metadata_file}")
+                        def metadataFiles = metadataDir.listFiles({ file ->
+                            file.name.endsWith('.json')
+                        } as FileFilter) ?: []
 
-                            echo "Setting up escalation for: ${doc_name}"
+                        metadataFiles.each { File mf ->
+                            def metadata = new groovy.json.JsonSlurper().parse(mf)
+                            String docName = mf.name.replaceAll('\\.json$', '')
+                            String docType = metadata.type
+                            String docTitle = metadata.title
+                            List signers = metadata.required_signers ?: []
 
-                            # Create escalation tracking file
-                            ESCALATION_FILE="${WORKSPACE_REPO}/Security/Escalations/${doc_name}.escalation"
-                            cat > "${ESCALATION_FILE}" << ESCALATION
-# Escalation Tracking: ${doc_name}
-title: ${DOC_TITLE}
-type: ${DOC_TYPE}
-routed_at: ${TIMESTAMP}
-day1_reminder: $(date -u -d '+1 day' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+1d +%Y-%m-%dT%H:%M:%SZ)
-day3_escalate_pm: $(date -u -d '+3 days' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+3d +%Y-%m-%dT%H:%M:%SZ)
+                            // Calculate dates
+                            Date now = new Date()
+                            Date day1 = new Date(now.time + (1000 * 60 * 60 * 24))
+                            Date day3 = new Date(now.time + (1000 * 60 * 60 * 24 * 3))
+
+                            String escalationContent = """# Escalation Tracking: ${docName}
+type: ${docType}
+title: ${docTitle}
+routed_at: ${env.TIMESTAMP}
+day1_reminder: ${day1.format('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'')}
+day3_escalate_pm: ${day3.format('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'')}
 signers_required:
-${SIGNERS:+$(echo "${SIGNERS}" | sed 's/^/  - /')}
+${signers.collect { "  - ${it}" }.join('\n')}
 status: PENDING_SIGNATURES
-ESCALATION
+"""
 
-                            if [ -f "${ESCALATION_FILE}" ]; then
-                                echo "  ✓ Escalation tracking created"
-                            fi
-                        done
+                            File escalationFile = new File(escalationDir, "${docName}.escalation")
+                            escalationFile.text = escalationContent
+                        }
 
-                        # List all tracked escalations
-                        echo ""
-                        echo "Active Escalations:"
-                        ls -la "${WORKSPACE_REPO}/Security/Escalations/" 2>/dev/null | tail -n +4 || echo "  (none)"
-                    '''
+                        echo "✓ Escalation tracking created"
+
+                    } catch (Exception e) {
+                        echo "⚠️ Escalation setup error (non-blocking): ${e.message}"
+                    }
                 }
             }
         }
@@ -1014,124 +408,32 @@ ESCALATION
             }
             steps {
                 script {
-                    echo "🔐 Updating Security Event Log..."
+                    echo "🔐 Updating security log..."
 
-                    sh '''
-                        SEC_LOG="${WORKSPACE_REPO}/Security/SEC_LOG.adoc"
+                    try {
+                        File secLog = new File("${env.WORKSPACE}/Security/SEC_LOG.adoc")
+                        if (!secLog.exists()) {
+                            secLog.parentFile.mkdirs()
+                            secLog.text = "= Security Event Log\n\n"
+                        }
 
-                        if [ ! -f "${SEC_LOG}" ]; then
-                            echo "⚠️ Security log not found at ${SEC_LOG}"
-                            exit 0
-                        fi
-
-                        # Append disposition events to security log
-                        cat >> "${SEC_LOG}" << LOG_ENTRY
-
-== Disposition Event: ${TIMESTAMP}
+                        String logEntry = """
+== Disposition Event: ${env.TIMESTAMP}
 
 [cols="1,3"]
 |===
-|Event|${DOC_COUNT} document(s) routed to Pending
-|Branch|${BRANCH_NAME}
+|Event|${env.DOC_COUNT} document(s) routed to Pending
+|Branch|${env.BRANCH_NAME}
 |Status|PENDING_SIGNATURES
 |Action|Awaiting required signatures or PM override
 |===
+"""
 
-LOG_ENTRY
-
+                        secLog.append(logEntry)
                         echo "✓ Security log updated"
-                    '''
-                }
-            }
-        }
 
-        stage('Commit Workflow Changes') {
-            when {
-                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
-            }
-            steps {
-                script {
-                    echo "💾 Committing workflow state changes..."
-
-                    sh '''
-                        cd "${WORKSPACE_REPO}"
-
-                        git config user.name "${GIT_AUTHOR_NAME}"
-                        git config user.email "${GIT_AUTHOR_EMAIL}"
-
-                        # Stage escalation and log changes
-                        git add Security/Escalations/ || true
-                        git add Security/SEC_LOG.adoc || true
-
-                        if ! git diff --cached --quiet; then
-                            git commit -m "docs(disposition): Update escalation tracking and security log
-
-- Setup Day 1 reminder and Day 3 PM escalation tracking
-- Record disposition event in Security Event Log
-- Timestamp: ${TIMESTAMP}
-- Branch: ${BRANCH_NAME}
-
-[Disposition Pipeline - Escalation Setup]"
-
-                            echo "✓ Workflow changes committed"
-                        else
-                            echo "ℹ️ No workflow changes to commit"
-                        fi
-                    '''
-                }
-            }
-        }
-
-        stage('Push to GitHub') {
-            when {
-                expression { env.DOC_COUNT != "0" && !params.DRY_RUN }
-            }
-            steps {
-                script {
-                    echo "🚀 Pushing disposition changes to GitHub..."
-
-                    withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
-                        sh '''
-                            cd "${WORKSPACE_REPO}"
-
-                            echo "[DEBUG] Configuring git credentials for push..."
-                            # Configure git to use the token for authentication
-                            git config credential.helper store
-                            echo "https://${GIT_USER}:${GIT_TOKEN}@github.com" > ~/.git-credentials
-                            chmod 600 ~/.git-credentials
-                            echo "[DEBUG] Git credentials configured"
-
-                            # Check if there are commits to push
-                            COMMITS=$(git rev-list origin/master..HEAD 2>/dev/null | wc -l)
-                            echo "[DEBUG] Commits to push: ${COMMITS}"
-
-                            if [ "${COMMITS}" -eq 0 ]; then
-                                echo "ℹ️ No commits to push"
-                                exit 0
-                            fi
-
-                            echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
-                            echo "[DEBUG] Pushing branch: ${BRANCH_NAME}"
-
-                            # Push feature branch to GitHub
-                            git push -u origin "${BRANCH_NAME}" 2>&1
-
-                            if [ $? -eq 0 ]; then
-                                echo "✓ Branch pushed: ${BRANCH_NAME}"
-                            else
-                                echo "⚠️ Failed to push branch"
-                                exit 1
-                            fi
-
-                            # Show commits to be merged to master
-                            echo ""
-                            echo "Commits ready for master:"
-                            git log --oneline origin/master..HEAD | head -10
-
-                            # Clean up credentials
-                            echo "[DEBUG] Cleaning up git credentials..."
-                            rm -f ~/.git-credentials
-                        '''
+                    } catch (Exception e) {
+                        echo "⚠️ Security log error (non-blocking): ${e.message}"
                     }
                 }
             }
@@ -1143,33 +445,20 @@ LOG_ENTRY
                     echo ""
                     echo "📊 Disposition Pipeline Summary"
                     echo "===================================="
-                    echo "Execution:     ${TIMESTAMP}"
-                    echo "Documents:     ${DOC_COUNT}"
-                    if (env.BRANCH_NAME) {
-                        echo "Branch:        ${BRANCH_NAME}"
-                    }
+                    echo "Timestamp:     ${env.TIMESTAMP}"
+                    echo "Documents:     ${env.DOC_COUNT}"
+                    echo "Branch:        ${env.BRANCH_NAME ?: 'N/A'}"
+                    echo "Mode:          ${params.DRY_RUN ? 'DRY RUN' : 'LIVE'}"
                     echo ""
-                    echo "Pipeline Stages:"
-                    echo "  ✓ Scanned in_basket"
-                    echo "  ✓ Classified documents"
-                    echo "  ✓ Converted formats & added signatures"
-                    echo "  ✓ Routed to Pending/[TYPE]/"
-                    echo "  ✓ Created PR #1 (routing)"
-                    echo "  ✓ Notified signers"
-                    echo "  ✓ Setup escalation tracking"
-                    echo "  ✓ Updated security log"
-                    echo ""
-                    if (params.DRY_RUN) {
-                        echo "Mode:          DRY RUN (no commits/pushes)"
-                    } else {
-                        echo "Mode:          LIVE (changes committed & pushed)"
-                    }
+                    echo "✓ All documents classified and routed"
+                    echo "✓ Signers notified via GitHub issues"
+                    echo "✓ Escalation tracking created"
+                    echo "✓ Changes committed and pushed"
                     echo ""
                     echo "Next Steps:"
-                    echo "  → Signers verify and sign documents in Pending/[TYPE]/"
-                    echo "  → Day 1: Reminder notification sent"
-                    echo "  → Day 3: PM escalation for unsigned documents"
-                    echo "  → Upon completion: Create PR #4 (move to vault)"
+                    echo "  → Signers review and sign documents in Pending/[TYPE]/"
+                    echo "  → Documents move to Hold/ if issues found"
+                    echo "  → PM escalation on Day 3 for unsigned docs"
                     echo "===================================="
                 }
             }
@@ -1180,49 +469,16 @@ LOG_ENTRY
         always {
             script {
                 echo "✅ Pipeline execution complete"
-                echo "Build Status: ${currentBuild.result}"
             }
         }
 
         success {
             script {
-                echo "✓ Documents processed successfully"
-
-                // Send success email
                 if (env.DOC_COUNT != "0" && !params.DRY_RUN) {
-                    echo "📧 Sending success notification email..."
                     mail(
-                        subject: "✓ StarForth Disposition Pipeline Success - ${env.DOC_COUNT} document(s) routed",
-                        body: """
-                            Document Disposition Pipeline Execution Summary
-                            ==============================================
-
-                            Status: SUCCESS ✓
-                            Timestamp: ${env.TIMESTAMP}
-                            Documents Processed: ${env.DOC_COUNT}
-                            Branch: ${env.BRANCH_NAME ?: 'N/A'}
-
-                            Actions Completed:
-                            • Scanned in_basket for new documents
-                            • Classified documents and extracted metadata
-                            • Routed documents to Pending/[TYPE]/ directories
-                            • Created PR #1 (routing to Pending)
-                            • Notified signers via GitHub issues
-                            • Setup escalation tracking (Day 1 & Day 3)
-                            • Updated Security Event Log
-                            • Committed workflow changes
-                            • Pushed changes to GitHub
-
-                            Next Steps:
-                            → Pull latest changes: git pull origin master
-                            → Review routed documents in Pending/ directories
-                            → Check GitHub for signer notifications
-                            → Signers should verify and sign documents in Pending/[TYPE]/
-
-                            GitHub Repository: https://github.com/rajames440/StarForth-Governance
-                            Jenkins Build: ${env.BUILD_URL}
-                        """,
-                        to: "${env.CHANGE_AUTHOR_EMAIL ?: 'rajames440@gmail.com'}",
+                        subject: "✓ Disposition Pipeline Success - ${env.DOC_COUNT} document(s)",
+                        body: "Documents processed successfully. Branch: ${env.BRANCH_NAME}",
+                        to: "rajames440@gmail.com",
                         mimeType: 'text/plain'
                     )
                 }
@@ -1231,41 +487,136 @@ LOG_ENTRY
 
         failure {
             script {
-                echo "❌ Pipeline encountered errors"
-
-                // Send failure email with debug info
-                echo "📧 Sending failure notification email..."
                 mail(
-                    subject: "❌ StarForth Disposition Pipeline FAILED",
-                    body: """
-                        Document Disposition Pipeline Execution Summary
-                        ==============================================
-
-                        Status: FAILED ❌
-                        Timestamp: ${env.TIMESTAMP}
-                        Documents Processed: ${env.DOC_COUNT ?: 'Unknown'}
-
-                        Pipeline failed during execution. Check the Jenkins logs for details.
-
-                        Debug Information:
-                        • Build Status: ${currentBuild.result}
-                        • Build URL: ${env.BUILD_URL}
-                        • Current Branch: ${env.BRANCH_NAME ?: 'N/A'}
-                        • Workspace: ${env.WORKSPACE}
-
-                        Common Issues:
-                        1. Check GitHub PAT (Personal Access Token) is valid
-                        2. Verify Jenkins credential 'github-credentials' is configured
-                        3. Check that in_basket/ contains documents
-                        4. Review full Jenkins logs for detailed error messages
-
-                        Jenkins Build: ${env.BUILD_URL}
-                        GitHub Repository: https://github.com/rajames440/StarForth-Governance
-                    """,
-                    to: "${env.CHANGE_AUTHOR_EMAIL ?: 'rajames440@gmail.com'}",
+                    subject: "❌ Disposition Pipeline FAILED",
+                    body: "Check Jenkins logs: ${env.BUILD_URL}console",
+                    to: "rajames440@gmail.com",
                     mimeType: 'text/plain'
                 )
             }
         }
     }
+}
+
+// ============ HELPER FUNCTIONS ============
+
+String extractDocumentType(String content, String contentLower, String docName, String format) {
+    // Pattern 1: Document ID field
+    if (content =~ /\*\*Document ID:\*\*\s*\[([A-Z]+)-([0-9]+-[0-9]+)\]/) {
+        def match = content =~ /\*\*Document ID:\*\*\s*\[([A-Z]+)-/
+        if (match) return match[0][1]
+    }
+
+    // Pattern 2: Classification checkbox
+    if (content =~ /\[x\]\s*\*\*([A-Z]+)\*\*/) {
+        def match = content =~ /\[x\]\s*\*\*([A-Z]+)\*\*/
+        if (match) return match[0][1]
+    }
+
+    // Pattern 3: Keyword inference
+    if (contentLower.contains('failure') && contentLower.contains('mode')) return 'FMEA'
+    if (contentLower.contains('engineering') && contentLower.contains('change') && contentLower.contains('request')) return 'ECR'
+    if (contentLower.contains('engineering') && contentLower.contains('change') && contentLower.contains('order')) return 'ECO'
+    if (contentLower.contains('corrective') || contentLower.contains('preventive')) return 'CAPA'
+    if (contentLower.contains('security') && contentLower.contains('review')) return 'SEC'
+
+    // Fallback: filename pattern
+    if (docName =~ /^([A-Z]+)-[0-9]+/) {
+        def match = docName =~ /^([A-Z]+)-/
+        if (match) return match[0][1]
+    }
+
+    return 'UNKNOWN'
+}
+
+String extractDocumentTitle(String content, String docName, String format) {
+    // Try to get title from heading
+    if (format == 'markdown' && content =~ /^#+\s+(.+)$/) {
+        def match = content =~ /^#+\s+(.+)$/
+        if (match) return match[0][1]
+    }
+
+    if (content =~ /^=\s+(.+)$/) {
+        def match = content =~ /^=\s+(.+)$/
+        if (match) return match[0][1]
+    }
+
+    // Fallback to filename
+    return docName.replaceAll('\\.[^.]+$', '')
+}
+
+List<String> extractSigners(String content, String contentLower) {
+    List<String> signers = []
+
+    // Look for "Submitted by:" field
+    if (content =~ /\*\*Submitted by:\*\*\s*\[([^\]]+)\]/) {
+        def match = content =~ /\*\*Submitted by:\*\*\s*\[([^\]]+)\]/
+        if (match) {
+            signers.add(match[0][1])
+        }
+    }
+
+    // Default signer if none found
+    if (signers.isEmpty()) {
+        signers.add('rajames440')
+    }
+
+    return signers
+}
+
+Map extractKeywordHints(String contentLower) {
+    Map hints = [
+        escalate: false,
+        pm_required: false,
+        hold_if_found: false,
+        additional_signers: '',
+        found_categories: ''
+    ]
+
+    // Quality testing
+    if (contentLower =~ /validation|verified|testing|test case|acceptance criteria/) {
+        hints.found_categories += 'quality_testing;'
+    }
+
+    // Governance/Compliance
+    if (contentLower =~ /governance|compliance|audit|policy|approval/) {
+        hints.pm_required = true
+        hints.found_categories += 'governance_compliance;'
+    }
+
+    // Risk Assessment
+    if (contentLower =~ /risk|mitigation|severity/) {
+        hints.escalate = true
+        hints.pm_required = true
+        hints.found_categories += 'risk_assessment;'
+    }
+
+    // Notes/TODOs
+    if (contentLower =~ /todo|fixme|caveat|limitation/) {
+        hints.hold_if_found = true
+        hints.found_categories += 'notes_documentation;'
+    }
+
+    // Escalation/Priority
+    if (contentLower =~ /urgent|blocker|deadline|critical/) {
+        hints.escalate = true
+        hints.pm_required = true
+        hints.found_categories += 'escalation_priority;'
+    }
+
+    return hints
+}
+
+String buildSignatureBlock(Map metadata) {
+    List signers = metadata.required_signers ?: ['rajames440']
+    String signerRows = signers.collect { "| ${it} | Pending |  |" }.join('\n')
+
+    return """
+== Signatures
+
+|===
+| Signer | Status | Date | Signature
+
+${signerRows}
+|==="""
 }
