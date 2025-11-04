@@ -751,7 +751,7 @@ SIGBLOCK
                                 cat > /tmp/issue_body.txt << 'ISSUE_EOF'
 Document pending signature collection.
 
-**Document:** `DOCUMENT_NAME_PLACEHOLDER`
+**Document:** [DOCUMENT_NAME_PLACEHOLDER]
 **Type:** DOCUMENT_TYPE_PLACEHOLDER
 **Title:** DOCUMENT_TITLE_PLACEHOLDER
 
@@ -759,9 +759,9 @@ Document pending signature collection.
 SIGNERS_PLACEHOLDER
 
 **Action Required:**
-1. Review document in `Pending/DOCUMENT_TYPE_PLACEHOLDER/DOCUMENT_NAME_PLACEHOLDER`
-2. Sign with GPG: `gpg --detach-sign --armor DOCUMENT_NAME_PLACEHOLDER`
-3. Create detached signature: `DOCUMENT_NAME_PLACEHOLDER.[your-username].asc`
+1. Review document in Pending/DOCUMENT_TYPE_PLACEHOLDER/DOCUMENT_NAME_PLACEHOLDER
+2. Sign with GPG: gpg --detach-sign --armor DOCUMENT_NAME_PLACEHOLDER
+3. Create detached signature: DOCUMENT_NAME_PLACEHOLDER.[your-username].asc
 4. Commit to repository or notify pipeline
 
 **Timeline:**
