@@ -37,7 +37,7 @@ Description: Document Disposition Pipeline - Route in_basket to Pending
 - **Repository URL:** https://github.com/rajames440/StarForth-Governance.git
 - **Credentials:** `github-credentials` (configured separately)
 - **Branch Specifier:** `*/master`
-- **Script Path:** `Jenkinsfile.disposition`
+- **Script Path:** `jenkinsfiles/disposition/Jenkinsfile`
 
 #### 4. Build Triggers
 
@@ -95,7 +95,7 @@ Description: Signature Verification Pipeline - Create PR #2/#3
 - **Repository URL:** https://github.com/rajames440/StarForth-Governance.git
 - **Credentials:** `github-credentials`
 - **Branch Specifier:** `*/master`
-- **Script Path:** `Jenkinsfile.signature-verify`
+- **Script Path:** `jenkinsfiles/signature-verify/Jenkinsfile`
 
 #### 4. Build Triggers
 
@@ -155,7 +155,7 @@ Description: Vault Router Pipeline - Create PR #4 (move to vault)
 - **Repository URL:** https://github.com/rajames440/StarForth-Governance.git
 - **Credentials:** `github-credentials`
 - **Branch Specifier:** `*/master`
-- **Script Path:** `Jenkinsfile.vault-router`
+- **Script Path:** `jenkinsfiles/vault-router/Jenkinsfile`
 
 #### 4. Build Triggers
 
@@ -425,8 +425,8 @@ starforth-vault-router
 
 **Problem:** Script path is wrong
 **Solution:**
-1. Verify file exists: `ls -la Jenkinsfile.disposition`
-2. Verify path in job config: `Jenkinsfile.disposition` (no leading /)
+1. Verify file exists: `ls -la jenkinsfiles/disposition/Jenkinsfile`
+2. Verify path in job config: `jenkinsfiles/disposition/Jenkinsfile` (no leading /)
 3. Verify branch: `*/master`
 
 ### Pipeline hangs on "Verify Git Status"
@@ -446,7 +446,7 @@ starforth-vault-router
 - [ ] Type: Pipeline
 - [ ] SCM: Git
 - [ ] Repository: https://github.com/rajames440/StarForth-Governance.git
-- [ ] Script path: `Jenkinsfile.disposition`
+- [ ] Script path: `jenkinsfiles/disposition/Jenkinsfile`
 - [ ] Build triggers: Poll SCM `H/15 * * * *`
 - [ ] Credentials: `github-credentials` configured
 - [ ] Parameters: DRY_RUN, PROCESS_DOCUMENT configured
@@ -457,7 +457,7 @@ starforth-vault-router
 - [ ] Type: Pipeline
 - [ ] SCM: Git
 - [ ] Repository: https://github.com/rajames440/StarForth-Governance.git
-- [ ] Script path: `Jenkinsfile.signature-verify`
+- [ ] Script path: `jenkinsfiles/signature-verify/Jenkinsfile`
 - [ ] Build triggers: None (manual)
 - [ ] Credentials: `github-credentials` configured
 - [ ] Parameters: DOCUMENT_PATH, SIGNATURE_FILE, SIGNER_USERNAME, DRY_RUN configured
@@ -468,7 +468,7 @@ starforth-vault-router
 - [ ] Type: Pipeline
 - [ ] SCM: Git
 - [ ] Repository: https://github.com/rajames440/StarForth-Governance.git
-- [ ] Script path: `Jenkinsfile.vault-router`
+- [ ] Script path: `jenkinsfiles/vault-router/Jenkinsfile`
 - [ ] Build triggers: None (manual)
 - [ ] Credentials: `github-credentials` configured
 - [ ] Parameters: DOCUMENT_PATH, DOCUMENT_TYPE, DRY_RUN, FORCE_PM_OVERRIDE configured

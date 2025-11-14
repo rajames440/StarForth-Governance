@@ -186,7 +186,7 @@ Optional: Configure GitHub webhook for real-time triggering
 ## Files & Locations
 
 ### Pipeline
-- **Jenkinsfile.disposition** - Main orchestrator (658 lines)
+- **jenkinsfiles/disposition/Jenkinsfile** - Main orchestrator (658 lines)
 
 ### Generated Directories (Runtime)
 - `/tmp/disposition-metadata/[DOC].json` - Document metadata

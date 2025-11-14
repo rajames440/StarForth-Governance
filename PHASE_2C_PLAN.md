@@ -15,7 +15,7 @@ Implement the signature verification workflow for documents in Pending/[TYPE]/ d
 ## Current State
 
 ### Phase 2B Deliverables (✅ Complete)
-- Jenkinsfile.disposition with 15 stages
+- jenkinsfiles/disposition/Jenkinsfile with 15 stages
 - Document classification via Claude
 - Format conversion (markdown → asciidoc)
 - Routing to Pending/[TYPE]/ directories

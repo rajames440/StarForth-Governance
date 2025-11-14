@@ -12,15 +12,15 @@
 **Phase 2** implements the complete Jenkins-based document disposition pipeline for governance documents. The system automates the flow of documents from GitHub submission (`in_basket/`) through signature collection (`Pending/[TYPE]/`) to final vault archival.
 
 **Three coordinated Jenkins pipelines** handle:
-1. **Jenkinsfile.disposition** - Document intake, classification, routing
-2. **Jenkinsfile.signature-verify** - Signature collection and verification
-3. **Jenkinsfile.vault-router** - Final vault routing for signed documents
+1. **jenkinsfiles/disposition/Jenkinsfile** - Document intake, classification, routing
+2. **jenkinsfiles/signature-verify/Jenkinsfile** - Signature collection and verification
+3. **jenkinsfiles/vault-router/Jenkinsfile** - Final vault routing for signed documents
 
 ---
 
 ## What's Implemented ✅
 
-### 1. Jenkinsfile.disposition (909 lines) - COMPLETE
+### 1. jenkinsfiles/disposition/Jenkinsfile (909 lines) - COMPLETE
 
 **Purpose**: Main orchestrator pipeline for document processing
 
@@ -62,7 +62,7 @@
 
 ---
 
-### 2. Jenkinsfile.vault-router (438 lines) - COMPLETE
+### 2. jenkinsfiles/vault-router/Jenkinsfile (438 lines) - COMPLETE
 
 **Purpose**: Routes fully-signed documents from Pending/ to vault directories
 
@@ -113,7 +113,7 @@ ART/MIN/REL → PENDING (no vault routing)
 
 ---
 
-### 3. Jenkinsfile.signature-verify (300 lines) - COMPLETE
+### 3. jenkinsfiles/signature-verify/Jenkinsfile (300 lines) - COMPLETE
 
 **Purpose**: Process incoming GPG signatures and create signature collection PRs
 

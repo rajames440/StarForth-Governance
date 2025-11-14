@@ -31,7 +31,7 @@ Phase 2C implementation is complete with full signature verification workflow an
   - Immutability assurance for compliance
   - Integration with Jenkins pipelines
   - Security event markers (🔴 CRITICAL, 🟡 WARNING, 🟢 INFO)
-- **Auto-updated by:** Jenkinsfile.disposition, signature-verify, vault-router
+- **Auto-updated by:** jenkinsfiles/disposition/Jenkinsfile, jenkinsfiles/signature-verify/Jenkinsfile, jenkinsfiles/vault-router/Jenkinsfile
 
 #### VAULT_ROUTING_MAP.md (ENGINEERING CONTROL)
 - **Purpose:** Authoritative document type → vault directory mapping
@@ -72,7 +72,7 @@ Phase 2C implementation is complete with full signature verification workflow an
   - 1: Validation error or signature failed
 - **Output:** `.sig-verified` JSON result file
 
-#### Jenkinsfile.signature-verify (JENKINS PIPELINE)
+#### jenkinsfiles/signature-verify/Jenkinsfile (JENKINS PIPELINE)
 - **Purpose:** PR #2 & #3 Creation - Signature Collection Pipeline
 - **Stages:**
   1. **Validate Parameters** - Check required inputs
@@ -93,7 +93,7 @@ Phase 2C implementation is complete with full signature verification workflow an
 
 ### 3. Vault Routing (1 pipeline)
 
-#### Jenkinsfile.vault-router (JENKINS PIPELINE)
+#### jenkinsfiles/vault-router/Jenkinsfile (JENKINS PIPELINE)
 - **Purpose:** PR #4 Creation - Vault Routing Pipeline
 - **Stages:**
   1. **Validate Parameters** - Check document and type
@@ -147,15 +147,15 @@ Pending/[TYPE]/[DOCUMENT]
 
 ```
 in_basket/
-  ↓ (PR #1: From Jenkinsfile.disposition)
+  ↓ (PR #1: From jenkinsfiles/disposition/Jenkinsfile)
 Pending/[TYPE]/[DOCUMENT]
   ↓ (Signers submit .asc files)
 Pending/[TYPE]/[DOCUMENT].*.asc
-  ↓ (PR #2/#3: From Jenkinsfile.signature-verify)
+  ↓ (PR #2/#3: From jenkinsfiles/signature-verify/Jenkinsfile)
 [DOCUMENT signature table updated, signed commit]
   ↓ (All required signatures collected)
 [VAULT]/[TYPE]-[ID]/[DOCUMENT]
-  ↓ (PR #4: From Jenkinsfile.vault-router)
+  ↓ (PR #4: From jenkinsfiles/vault-router/Jenkinsfile)
 VAULT_DIRECTORY/[DOCUMENT] + .asc files
   ↓ (Document immutable in vault)
 ✓ COMPLETE - Document in vault with audit trail
@@ -163,18 +163,18 @@ VAULT_DIRECTORY/[DOCUMENT] + .asc files
 
 ## Integration Points
 
-### From Jenkinsfile.disposition (Phase 2B)
+### From jenkinsfiles/disposition/Jenkinsfile (Phase 2B)
 - Calls to create PR #1 (routing to Pending/)
 - Escalation tracking setup
 - Signer notifications
 
 ### Triggered by Signature Detection
 - Git webhook or polling detects `.asc` files in Pending/
-- Calls Jenkinsfile.signature-verify
+- Calls jenkinsfiles/signature-verify/Jenkinsfile
 - Creates PR #2/#3
 
 ### Triggered by Vault Routing
-- Manual or automatic call to Jenkinsfile.vault-router
+- Manual or automatic call to jenkinsfiles/vault-router/Jenkinsfile
 - Moves to vault (PR #4)
 - Updates SEC_LOG.adoc
 
@@ -199,12 +199,12 @@ VAULT_DIRECTORY/[DOCUMENT] + .asc files
 ✅ TEST-ECR-001.md (requires rajames440, eng-manager signatures)
 
 ### Test Workflow
-1. Run Jenkinsfile.disposition with test documents
+1. Run jenkinsfiles/disposition/Jenkinsfile with test documents
 2. Documents routed to Pending/CAPA/ and Pending/ECR/
 3. Create `.asc` signature files for each signer
-4. Trigger Jenkinsfile.signature-verify for each signature
+4. Trigger jenkinsfiles/signature-verify/Jenkinsfile for each signature
 5. Verify PR #2/#3 created with signature table updated
-6. Trigger Jenkinsfile.vault-router when all signatures present
+6. Trigger jenkinsfiles/vault-router/Jenkinsfile when all signatures present
 7. Verify PR #4 created and document in vault
 
 ## Known Limitations & Future Work
@@ -239,8 +239,8 @@ VAULT_DIRECTORY/[DOCUMENT] + .asc files
 - `bin/verify-signature.sh` - Signature verification (executable)
 
 ### Pipelines
-- `Jenkinsfile.signature-verify` - PR #2/#3 pipeline
-- `Jenkinsfile.vault-router` - PR #4 pipeline
+- `jenkinsfiles/signature-verify/Jenkinsfile` - PR #2/#3 pipeline
+- `jenkinsfiles/vault-router/Jenkinsfile` - PR #4 pipeline
 
 ### Documentation
 - `PHASE_2C_COMPLETION.md` - This file
@@ -273,8 +273,8 @@ af1d3f6 docs: Complete disposition process with full architecture
    - PGP key setup for signers
 
 2. **Jenkins Configuration**
-   - Configure Jenkinsfile.signature-verify as new pipeline job
-   - Configure Jenkinsfile.vault-router as new pipeline job
+   - Configure jenkinsfiles/signature-verify/Jenkinsfile as new pipeline job
+   - Configure jenkinsfiles/vault-router/Jenkinsfile as new pipeline job
    - Setup webhook for signature file detection (optional)
 
 3. **Testing**

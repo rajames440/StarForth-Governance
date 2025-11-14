@@ -93,9 +93,9 @@ Step 5: Complete
 | `Security/Signatures.adoc` | List of authorized signers and their roles |
 | `VAULT_ROUTING_MAP.md` | Where each document type goes (Vault or Pending) |
 | `Security/SEC_LOG.adoc` | Audit log of all signature events |
-| `Jenkinsfile.disposition` | Job 1 pipeline definition |
-| `Jenkinsfile.signature-verify` | Job 2 pipeline definition |
-| `Jenkinsfile.vault-router` | Job 3 pipeline definition |
+| `jenkinsfiles/disposition/Jenkinsfile` | Job 1 pipeline definition |
+| `jenkinsfiles/signature-verify/Jenkinsfile` | Job 2 pipeline definition |
+| `jenkinsfiles/vault-router/Jenkinsfile` | Job 3 pipeline definition |
 | `bin/verify-signature.sh` | Script that verifies GPG signatures |
 
 ---

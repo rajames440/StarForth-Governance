@@ -21,7 +21,7 @@ Phase 2B & 2C pipelines are complete and functional. However, **4 critical gates
 
 **Status:** INCOMPLETE - TODO in code
 **Severity:** HIGH
-**Location:** `Jenkinsfile.disposition:417`
+**Location:** `jenkinsfiles/disposition/Jenkinsfile:417`
 
 **Current State:**
 ```bash
@@ -52,7 +52,7 @@ echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
 
 **Blocking Code:**
 ```bash
-# Line 417 in Jenkinsfile
+# Line 417 in jenkinsfiles/disposition/Jenkinsfile
 echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
 # ↑ This just logs, doesn't actually notify
 ```
@@ -74,7 +74,7 @@ echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
 **Impact:** Pipelines cannot run without this
 
 **Current State:**
-- 3 Jenkinsfile* pipeline definitions created ✅
+- 3 Jenkinsfile pipeline definitions created in `jenkinsfiles/` directory ✅
 - No Jenkins jobs created to run them ❌
 
 **Required Configuration:**
@@ -84,7 +84,7 @@ echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
 - **Type:** Pipeline (Declarative)
 - **Repository:** rajames440/StarForth-Governance
 - **Branch:** master
-- **Script Path:** Jenkinsfile.disposition
+- **Script Path:** jenkinsfiles/disposition/Jenkinsfile
 - **Triggers:**
   - Poll SCM: H/15 * * * * (every 15 minutes)
   - Optional: GitHub push webhook
@@ -94,7 +94,7 @@ echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
 - **Type:** Pipeline (Declarative)
 - **Repository:** rajames440/StarForth-Governance
 - **Branch:** master
-- **Script Path:** Jenkinsfile.signature-verify
+- **Script Path:** jenkinsfiles/signature-verify/Jenkinsfile
 - **Triggers:**
   - Manual (parameterized)
   - Optional: GitHub webhook on .asc files
@@ -104,7 +104,7 @@ echo "[NOTIFY] ${signer}: Please sign ${doc_name}" >> /tmp/notification-log
 - **Type:** Pipeline (Declarative)
 - **Repository:** rajames440/StarForth-Governance
 - **Branch:** master
-- **Script Path:** Jenkinsfile.vault-router
+- **Script Path:** jenkinsfiles/vault-router/Jenkinsfile
 - **Triggers:**
   - Manual (parameterized)
   - Optional: Completion of signature-verify pipeline
@@ -125,9 +125,9 @@ credentialsId: 'github-credentials'  // ← References non-existent credential
 ```
 
 **All 3 Pipelines Reference:**
-- Jenkinsfile.disposition:55
-- Jenkinsfile.signature-verify:79
-- Jenkinsfile.vault-router:78
+- jenkinsfiles/disposition/Jenkinsfile:55
+- jenkinsfiles/signature-verify/Jenkinsfile:79
+- jenkinsfiles/vault-router/Jenkinsfile:78
 
 **Required Setup:**
 1. **Create GitHub Personal Access Token (PAT)**
@@ -379,7 +379,7 @@ All risks will be mitigated.
 ## File Audit
 
 ### TODO Comments in Code
-- 1 TODO: Email notification system (Jenkinsfile.disposition:417)
+- 1 TODO: Email notification system (jenkinsfiles/disposition/Jenkinsfile:417)
 - Rest of code has no TODOs (implementation complete)
 
 ### Missing Configuration Files
@@ -388,9 +388,9 @@ All risks will be mitigated.
 - `PGP/keys/` directory - Public keys not yet collected
 
 ### Ready-to-Run Files
-- ✅ Jenkinsfile.disposition
-- ✅ Jenkinsfile.signature-verify
-- ✅ Jenkinsfile.vault-router
+- ✅ jenkinsfiles/disposition/Jenkinsfile
+- ✅ jenkinsfiles/signature-verify/Jenkinsfile
+- ✅ jenkinsfiles/vault-router/Jenkinsfile
 - ✅ bin/verify-signature.sh
 - ✅ Security/Signatures.adoc
 - ✅ Security/SEC_LOG.adoc
