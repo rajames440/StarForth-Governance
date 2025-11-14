@@ -93,9 +93,9 @@ Step 5: Complete
 | `Security/Signatures.adoc` | List of authorized signers and their roles |
 | `VAULT_ROUTING_MAP.md` | Where each document type goes (Vault or Pending) |
 | `Security/SEC_LOG.adoc` | Audit log of all signature events |
-| `Jenkinsfile.disposition` | Job 1 pipeline definition |
-| `Jenkinsfile.signature-verify` | Job 2 pipeline definition |
-| `Jenkinsfile.vault-router` | Job 3 pipeline definition |
+| `jenkinsfiles/disposition/Jenkinsfile` | Job 1 pipeline definition (Pure Groovy DSL) |
+| `jenkinsfiles/signature-verify/Jenkinsfile` | Job 2 pipeline definition |
+| `jenkinsfiles/vault-router/Jenkinsfile` | Job 3 pipeline definition |
 | `bin/verify-signature.sh` | Script that verifies GPG signatures |
 
 ---
@@ -247,7 +247,7 @@ sudo chmod 700 /var/lib/jenkins/.ssh
 - **Repository URL:** `https://github.com/rajames440/StarForth-Governance.git`
 - **Credentials:** Select `github-credentials`
 - **Branch Specifier:** `*/master`
-- **Script Path:** `Jenkinsfile.disposition`
+- **Script Path:** `jenkinsfiles/disposition/Jenkinsfile`
 
 **Build Triggers:**
 - ✅ Build periodically
@@ -267,7 +267,7 @@ sudo chmod 700 /var/lib/jenkins/.ssh
 4. **Description:** Signature Verification Pipeline
 
 **Pipeline Configuration:** (same as above)
-- **Script Path:** `Jenkinsfile.signature-verify`
+- **Script Path:** `jenkinsfiles/signature-verify/Jenkinsfile`
 
 **Build Triggers:**
 - ❌ None (manual trigger with parameters)
@@ -288,7 +288,7 @@ sudo chmod 700 /var/lib/jenkins/.ssh
 4. **Description:** Vault Router Pipeline
 
 **Pipeline Configuration:** (same as above)
-- **Script Path:** `Jenkinsfile.vault-router`
+- **Script Path:** `jenkinsfiles/vault-router/Jenkinsfile`
 
 **Build Triggers:**
 - ❌ None (manual trigger with parameters)
@@ -734,6 +734,18 @@ sudo systemctl restart jenkins
 ---
 
 ## Troubleshooting
+
+### Job Fails to Find Jenkinsfile
+
+**Problem:** Jenkins can't find the Jenkinsfile in repository
+
+**Solution:**
+1. Verify Jenkinsfile paths are correct in job configuration:
+   - Job 1: `jenkinsfiles/disposition/Jenkinsfile`
+   - Job 2: `jenkinsfiles/signature-verify/Jenkinsfile`
+   - Job 3: `jenkinsfiles/vault-router/Jenkinsfile`
+2. Verify files exist in repository: `ls -la jenkinsfiles/*/Jenkinsfile`
+3. Verify branch specifier is `*/master`
 
 ### Job Fails: "Repository not found"
 
